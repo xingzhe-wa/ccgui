@@ -21,6 +21,8 @@ kotlin {
 
 // Configure project's dependencies
 repositories {
+    // 腾讯云镜像源（加速国内下载）
+    maven(url = "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/")
     mavenCentral()
 
     // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
