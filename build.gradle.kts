@@ -33,6 +33,11 @@ repositories {
 
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/version_catalogs.html
 dependencies {
+    // JSON 处理
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // JCEF (已包含在 IntelliJ Platform 中，无需额外依赖)
+
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
@@ -159,3 +164,14 @@ intellijPlatformTesting {
         }
     }
 }
+
+// ============================================
+// CCGUI 自定义任务
+// ============================================
+//
+// 注意：buildWebview 和 buildAiBridge 任务将在后续阶段实现
+// 当前阶段专注于 Kotlin 核心代码的编译和测试
+//
+// TODO: 实现 buildWebview 任务（React 前端构建）
+// TODO: 实现 buildAiBridge 任务（Node.js Bridge 构建）
+// TODO: 实现 buildDist 任务（合并所有资源）
