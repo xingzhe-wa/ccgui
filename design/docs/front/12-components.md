@@ -589,6 +589,63 @@ export const Dialog = ({
 };
 ```
 
+### 3.4 Icon 系统
+
+项目使用 `lucide-react` 作为图标源库，通过统一的 Icon 通用组件对外暴露。
+
+```typescript
+// ============ shared/components/Icon/index.tsx ============
+
+import { icons, type LucideProps } from 'lucide-react';
+
+/**
+ * 图标名称类型（从 lucide-react 导出的所有图标名称）
+ */
+export type IconName = keyof typeof icons;
+
+/**
+ * Icon 通用组件 Props
+ */
+export interface IconProps extends LucideProps {
+  /**
+   * 图标名称，对应 lucide-react 中的图标
+   */
+  name: IconName;
+}
+
+/**
+ * Icon 通用组件
+ * 通过 name prop 映射到具体图标，如 <Icon name="copy" />
+ */
+export const Icon = ({ name, ...props }: IconProps) => {
+  const LucideIcon = icons[name];
+  if (!LucideIcon) {
+    console.warn(`Icon "${name}" not found in lucide-react`);
+    return null;
+  }
+  return <LucideIcon {...props} />;
+};
+
+/**
+ * 同时导出具体图标组件供直接使用
+ * 示例：import { CopyIcon } from '@/shared/components/Icon'
+ */
+export { Copy as CopyIcon } from 'lucide-react';
+```
+
+**使用方式：**
+
+```typescript
+// 方式1：通过 name prop 使用（适用于动态图标场景）
+<Icon name="copy" className="h-4 w-4" />
+
+// 方式2：直接导入具体图标组件（适用于静态引用，类型安全）
+import { CopyIcon } from '@/shared/components/Icon';
+<CopyIcon className="h-4 w-4" />
+```
+
+**文件位置：** `src/shared/components/Icon/index.tsx`
+
 ---
 
 ## 4. 复合组件
@@ -922,7 +979,61 @@ const TypingCursor = () => (
 );
 ```
 
-### 5.2 InteractiveQuestionPanel组件
+### 5.2 补充组件接口定义
+
+以下组件在业务代码中使用，此处仅定义其 Props 接口（完整实现代码省略）。
+
+```typescript
+// === 主题编辑器辅助组件 ===
+
+interface ColorPickerProps {
+  value: string;
+  onChange: (color: string) => void;
+  format?: 'hex' | 'hsl' | 'rgb';
+}
+
+interface FontSelectorProps {
+  value: string;
+  onChange: (font: string) => void;
+  monospace?: boolean;
+}
+
+interface SliderProps {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+  label?: string;
+}
+
+// === 消息子组件 ===
+
+interface MessageAvatarProps {
+  role: MessageRole;
+  size?: 'sm' | 'md';
+}
+
+interface MessageTimestampProps {
+  timestamp: number;
+  format?: string;
+}
+
+interface MessageReferenceProps {
+  excerpt: string;
+  timestamp: number;
+  onClick?: () => void;
+}
+
+interface MessageActionsProps {
+  isVisible: boolean;
+  onReply?: () => void;
+  onCopy?: () => void;
+  onDelete?: () => void;
+}
+```
+
+### 5.3 InteractiveQuestionPanel组件
 
 ```typescript
 // ============ features/interaction/components/InteractiveQuestionPanel.tsx ============
@@ -1002,6 +1113,7 @@ export const InteractiveQuestionPanel = memo(({
       <div className="mb-4">
         {questionType === QuestionType.SINGLE_CHOICE && (
           <SingleChoiceOptions
+            questionId={questionId}
             options={options}
             selected={selectedAnswer}
             onChange={setSelectedAnswer}
@@ -1053,10 +1165,12 @@ export const InteractiveQuestionPanel = memo(({
 
 // SingleChoiceOptions子组件
 const SingleChoiceOptions = ({
+  questionId,
   options,
   selected,
   onChange
 }: {
+  questionId: string;
   options: Array<{ id: string; label: string; description?: string; icon?: string }>;
   selected: string;
   onChange: (value: string) => void;
@@ -1232,6 +1346,7 @@ const MessageItem = () => {
 
 ```typescript
 // ============ shared/utils/event-bus.ts ============
+// 注意：此为简化版。完整实现（含 once/clear/clearEvent/getListenerCount）见 01-phase1-foundation.md
 
 class EventBus {
   private listeners = new Map<string, Set<Function>>();

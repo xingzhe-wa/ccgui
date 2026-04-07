@@ -190,7 +190,7 @@ MyComponent.displayName = 'MyComponent';
 // ============ appStore.ts - 应用全局状态 ============
 interface AppState {
   // 会话相关
-  sessions: Session[];
+  sessions: ChatSession[];
   currentSessionId: string;
 
   // UI状态
@@ -202,9 +202,10 @@ interface AppState {
 
   // 操作
   switchSession: (sessionId: string) => void;
-  createSession: (name: string, type: SessionType) => Session;
+  createSession: (name: string, type: SessionType) => Promise<ChatSession>;
   deleteSession: (sessionId: string) => void;
-  updateSession: (sessionId: string, updates: Partial<Session>) => void;
+  updateSession: (sessionId: string, updates: Partial<ChatSession>) => void;
+  reorderSessions: (sessions: ChatSession[]) => void;
 
   // UI操作
   toggleSidebar: () => void;
@@ -228,8 +229,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     window.ccBackend?.switchSession(sessionId);
   },
 
-  createSession: (name, type) => {
-    const session = window.ccBackend?.createSession(name, type);
+  createSession: async (name, type) => {
+    const session = await window.ccBackend?.createSession(name, type);
     if (session) {
       set((state) => ({ sessions: [...state.sessions, session] }));
       get().switchSession(session.id);
@@ -252,6 +253,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
 
+  reorderSessions: (sessions) => set({ sessions }),
+
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   togglePreviewPanel: () => set((state) => ({ previewPanelOpen: !state.previewPanelOpen })),
 
@@ -263,9 +266,7 @@ interface SessionState {
   // 当前会话消息
   messages: Message[];
 
-  // 流式输出状态
-  streamingMessageId: string | null;
-  streamingContent: string;
+  // 注意：流式输出状态由独立的 streamingStore 管理（见 Phase 3）
 
   // 交互式请求状态
   pendingQuestions: InteractiveQuestion[];
@@ -273,13 +274,7 @@ interface SessionState {
   // 操作
   addMessage: (message: Message) => void;
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
-  deleteMessage: (messageId: string) => void;
-
-  // 流式输出操作
-  startStreaming: (messageId: string) => void;
-  appendStreamingChunk: (chunk: string) => void;
-  finishStreaming: () => void;
-  cancelStreaming: () => void;
+  removeMessage: (messageId: string) => void;
 
   // 交互式请求操作
   addQuestion: (question: InteractiveQuestion) => void;
@@ -289,8 +284,7 @@ interface SessionState {
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   messages: [],
-  streamingMessageId: null,
-  streamingContent: '',
+  // 注意：流式输出状态由独立的 streamingStore 管理（见 Phase 3）
   pendingQuestions: [],
 
   addMessage: (message) => {
@@ -305,53 +299,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }));
   },
 
-  deleteMessage: (messageId) => {
+  removeMessage: (messageId) => {
     set((state) => ({
       messages: state.messages.filter((msg) => msg.id !== messageId)
     }));
-  },
-
-  startStreaming: (messageId) => {
-    const newMessage: Message = {
-      id: messageId,
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now()
-    };
-    set((state) => ({
-      messages: [...state.messages, newMessage],
-      streamingMessageId: messageId,
-      streamingContent: ''
-    }));
-  },
-
-  appendStreamingChunk: (chunk) => {
-    const { streamingMessageId, streamingContent } = get();
-    if (!streamingMessageId) return;
-
-    const newContent = streamingContent + chunk;
-    set({ streamingContent: newContent });
-
-    // 更新消息内容
-    get().updateMessage(streamingMessageId, { content: newContent });
-  },
-
-  finishStreaming: () => {
-    set({
-      streamingMessageId: null,
-      streamingContent: ''
-    });
-  },
-
-  cancelStreaming: () => {
-    const { streamingMessageId } = get();
-    if (streamingMessageId) {
-      get().deleteMessage(streamingMessageId);
-    }
-    set({
-      streamingMessageId: null,
-      streamingContent: ''
-    });
   },
 
   addQuestion: (question) => {
@@ -508,62 +459,38 @@ export function useStreaming(messageId: string) {
   const [content, setContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { appendStreamingChunk, finishStreaming } = useSessionStore();
+  const contentRef = useRef('');
 
   useEffect(() => {
-    let abortController = new AbortController();
+    setIsStreaming(true);
+    setError(null);
+    contentRef.current = '';
 
-    const startStreaming = async () => {
-      setIsStreaming(true);
-      setError(null);
+    // 通过 EventBus 监听流式输出事件
+    const unsubChunk = eventBus.on(Events.STREAMING_CHUNK, (data: { chunk: string }) => {
+      contentRef.current += data.chunk;
+      setContent(contentRef.current);
+    });
 
-      try {
-        // 注册SSE事件监听
-        const unsubscribe = window.ccEvents?.on('streaming:chunk', (data: { chunk: string }) => {
-          setContent((prev) => {
-            const newContent = prev + data.chunk;
-            appendStreamingChunk(data.chunk);
-            return newContent;
-          });
-        });
+    const unsubComplete = eventBus.on(Events.STREAMING_COMPLETE, () => {
+      setIsStreaming(false);
+    });
 
-        // 监听流结束
-        const completeUnsubscribe = window.ccEvents?.on('streaming:complete', () => {
-          setIsStreaming(false);
-          finishStreaming();
-          unsubscribe?.();
-          completeUnsubscribe?.();
-        });
+    const unsubError = eventBus.on(Events.STREAMING_ERROR, (data: { error: string }) => {
+      setError(data.error);
+      setIsStreaming(false);
+    });
 
-        // 监听错误
-        const errorUnsubscribe = window.ccEvents?.on('streaming:error', (err: { error: string }) => {
-          setError(err.error);
-          setIsStreaming(false);
-          unsubscribe?.();
-          completeUnsubscribe?.();
-          errorUnsubscribe?.();
-        });
-
-        return () => {
-          unsubscribe?.();
-          completeUnsubscribe?.();
-          errorUnsubscribe?.();
-        };
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        setIsStreaming(false);
-      }
-    };
-
-    startStreaming();
-
+    // 组件卸载时自动取消所有订阅
     return () => {
-      abortController.abort();
+      unsubChunk();
+      unsubComplete();
+      unsubError();
     };
-  }, [messageId, appendStreamingChunk, finishStreaming]);
+  }, [messageId]);
 
   const cancel = useCallback(() => {
-    window.ccBackend?.cancelStreaming(messageId);
+    eventBus.emit(Events.STREAMING_CANCEL, { messageId });
     setIsStreaming(false);
   }, [messageId]);
 
@@ -703,10 +630,10 @@ declare global {
       saveCustomTheme(theme: ThemeConfig): Promise<void>;
 
       // 会话相关
-      createSession(name: string, type: SessionType): Promise<Session>;
+      createSession(name: string, type: SessionType): Promise<ChatSession>;
       switchSession(sessionId: string): Promise<void>;
       deleteSession(sessionId: string): Promise<void>;
-      searchSessions(query: string): Promise<Session[]>;
+      searchSessions(query: string): Promise<ChatSession[]>;
       exportSession(sessionId: string, format: 'markdown' | 'pdf'): Promise<Blob>;
 
       // 生态相关
@@ -903,8 +830,8 @@ class JavaBridge {
     return this.invoke<void>('updateTheme', { theme });
   }
 
-  async createSession(name: string, type: SessionType): Promise<Session> {
-    return this.invoke<Session>('createSession', { name, type });
+  async createSession(name: string, type: SessionType): Promise<ChatSession> {
+    return this.invoke<ChatSession>('createSession', { name, type });
   }
 
   async switchSession(sessionId: string): Promise<void> {
@@ -929,6 +856,7 @@ javaBridge.init().catch((error) => {
 
 ```typescript
 // ============ event-bus.ts - 事件总线 ============
+// 完整实现见 01-phase1-foundation.md 事件总线章节
 
 type EventHandler<T = any> = (data: T) => void;
 

@@ -1,11 +1,32 @@
-# Phase 1: 基础架构搭建
+# Phase 1: 项目基础与通信桥接 (Foundation)
 
-**阶段周期**: Week 1-3 (3周)
-**阶段目标**: 搭建React + TypeScript项目脚手架，实现JCEF环境搭建与Java-JS通信桥接，建立状态管理框架
+**优先级**: P0 (最高，所有后续Phase的基础)
+**预估工期**: 15人天 (3周)
+**前置依赖**: 后端Phase 1（数据模型定义完成，用于类型对齐）
+**阶段目标**: React项目可运行，JCEF双向通信打通，Zustand状态管理框架就绪
 
 ---
 
-## 📋 本阶段任务清单
+## 1. 阶段概览
+
+本阶段解决的核心问题是：**前端项目从零到可用**。需要完成：
+
+1. React 18 + TypeScript + Vite项目初始化（含TailwindCSS/ESLint）
+2. JCEF浏览器环境检测与初始化组件
+3. Java ↔ JavaScript 双向通信桥接（JBCefJSQuery + EventBus）
+4. Zustand状态管理框架（appStore / sessionStore / themeStore）
+5. React Router路由系统
+
+**完成标志**: 可通过React UI发送"Hello"并收到后端回复
+
+**与后端协作点**:
+- 后端Phase 2的 `BridgeManager` 会注入 `window.ccBackend` 和 `window.ccEvents`
+- 前端Phase 1完成后，后端即可通过 `CefJavaScriptExecutor` 调用前端函数
+- 前后端需要在 `bridge.ts` 中的API接口签名保持一致
+
+---
+
+## 2. 任务清单
 
 ### Week 1: 项目初始化与脚手架
 
@@ -995,11 +1016,11 @@ stores/
 ```typescript
 // src/shared/stores/appStore.ts
 import { create } from 'zustand';
-import type { Session, UIState, TaskProgress } from '@/shared/types';
+import type { ChatSession, UIState, TaskProgress, SessionType } from '@/shared/types';
 
 interface AppState {
   // 会话相关
-  sessions: Session[];
+  sessions: ChatSession[];
   currentSessionId: string;
 
   // UI状态
@@ -1012,9 +1033,9 @@ interface AppState {
 
   // 操作
   switchSession: (sessionId: string) => void;
-  createSession: (name: string, type: any) => Promise<Session>;
+  createSession: (name: string, type: SessionType) => Promise<ChatSession>;
   deleteSession: (sessionId: string) => void;
-  updateSession: (sessionId: string, updates: Partial<Session>) => void;
+  updateSession: (sessionId: string, updates: Partial<ChatSession>) => void;
 
   // UI操作
   toggleSidebar: () => void;
@@ -1118,34 +1139,104 @@ export function AppRouter() {
 
 ---
 
-## ✅ 阶段验收标准
+## 3. 任务依赖与执行顺序
 
-### 功能验收
-- [ ] React项目可正常启动和构建
-- [ ] TypeScript编译无错误
-- [ ] TailwindCSS样式正常工作
-- [ ] JCEF环境检测正常
-- [ ] Java-JS双向通信正常
-- [ ] 事件总线功能正常
-- [ ] Zustand状态管理正常
-- [ ] React Router路由正常
+```
+T1.1 项目初始化 (Week 1)
+├── T1-W1-01 React项目初始化          ← 无依赖
+├── T1-W1-02 TypeScript配置           ← 依赖 T1-W1-01
+├── T1-W1-03 TailwindCSS配置          ← 依赖 T1-W1-01
+├── T1-W1-04 目录结构创建             ← 依赖 T1-W1-01
+├── T1-W1-05 ESLint/Prettier          ← 依赖 T1-W1-01
+└── T1-W1-06 路径别名配置             ← 依赖 T1-W1-01
 
-### 性能验收
-- [ ] 首次渲染 < 500ms
-- [ ] HMR正常（非JCEF环境）
-- [ ] 无内存泄漏
+T1.2 JCEF通信 (Week 2)
+├── T1-W2-01 JCEF浏览器初始化         ← 依赖 T1.1全部
+├── T1-W2-02 Java全局类型定义         ← 依赖 T1-W1-02 + 后端Phase 1的model包
+├── T1-W2-03 JBCefJSQuery端点注册     ← 依赖 T1-W2-01 + T1-W2-02
+├── T1-W2-04 EventBus实现             ← 依赖 T1-W2-01
+├── T1-W2-05 通信封装层               ← 依赖 T1-W2-03 + T1-W2-04
+└── T1-W2-06 错误处理与重试           ← 依赖 T1-W2-05
 
-### 代码质量验收
-- [ ] ESLint检查通过
-- [ ] TypeScript strict mode通过
-- [ ] 组件有完整的Props类型定义
-- [ ] 代码符合规范
+T1.3 状态管理 (Week 3)
+├── T1-W3-01 Zustand Store架构设计    ← 依赖 T1.1 + T1-W2-02(类型定义)
+├── T1-W3-02 appStore实现             ← 依赖 T1-W3-01 + T1-W2-05(通信层)
+├── T1-W3-03 sessionStore实现         ← 依赖 T1-W3-01 + T1-W2-05
+├── T1-W3-04 themeStore实现           ← 依赖 T1-W3-01
+├── T1-W3-05 React Router配置         ← 依赖 T1.1
+└── T1-W3-06 基础布局组件             ← 依赖 T1-W3-05
+```
+
+**关键路径**: T1-W1-01 → T1-W2-01 → T1-W2-05 → T1-W3-02
 
 ---
 
-## 📚 相关文档
+## 4. 验收标准
 
+### 功能验收
+- [ ] React项目可正常启动和构建
+- [ ] TypeScript编译无错误 (`tsc --noEmit` 通过)
+- [ ] TailwindCSS样式正常工作
+- [ ] JCEF环境检测正常（在IDEA插件内显示"JCEF Ready"）
+- [ ] Java-JS双向通信正常（发送"Hello" → 收到回复）
+- [ ] 事件总线功能正常（订阅/发布/取消均正常）
+- [ ] Zustand状态管理正常（状态读写/异步操作）
+- [ ] React Router路由正常（/ → /settings 跳转正常）
+
+### 性能验收
+- [ ] 首次渲染 < 500ms
+- [ ] Java→JS调用延迟 < 50ms
+- [ ] 无内存泄漏（组件卸载后事件监听器清理干净）
+
+### 代码质量验收
+- [ ] ESLint检查 0 errors, 0 warnings
+- [ ] TypeScript strict mode通过
+- [ ] 组件有完整的Props类型定义
+- [ ] 代码符合规范（见 00-overview.md 编码规范）
+
+---
+
+## 5. 文件清单汇总
+
+### 新增文件
+
+| 文件路径 | 类型 | 说明 |
+|----------|------|------|
+| `frontend/package.json` | 配置 | npm项目配置 |
+| `frontend/vite.config.ts` | 配置 | Vite构建配置 |
+| `frontend/tsconfig.json` | 配置 | TypeScript配置 |
+| `frontend/tailwind.config.js` | 配置 | TailwindCSS配置 |
+| `frontend/.eslintrc.cjs` | 配置 | ESLint配置 |
+| `frontend/.prettierrc` | 配置 | Prettier配置 |
+| `src/main/index.tsx` | 入口 | React应用入口 |
+| `src/main/App.tsx` | 入口 | 根组件 |
+| `src/main/router.tsx` | 入口 | 路由配置 |
+| `src/shared/types/index.ts` | 类型 | 统一类型导出 |
+| `src/shared/types/bridge.ts` | 类型 | Java通信桥接类型 |
+| `src/shared/types/chat.ts` | 类型 | 聊天相关类型 |
+| `src/shared/types/session.ts` | 类型 | 会话相关类型 |
+| `src/shared/types/theme.ts` | 类型 | 主题相关类型 |
+| `src/shared/utils/cn.ts` | 工具 | TailwindCSS类名合并 |
+| `src/shared/utils/event-bus.ts` | 工具 | 事件总线实现 |
+| `src/shared/utils/storage.ts` | 工具 | 本地存储管理 |
+| `src/lib/java-bridge.ts` | 核心 | Java通信封装层 |
+| `src/shared/stores/appStore.ts` | 状态 | 全局应用状态 |
+| `src/shared/stores/sessionStore.ts` | 状态 | 会话状态 |
+| `src/shared/stores/themeStore.ts` | 状态 | 主题状态 |
+| `src/shared/hooks/useJavaBridge.ts` | Hook | Java通信Hook |
+| `src/shared/hooks/useTheme.ts` | Hook | 主题切换Hook |
+| `src/shared/hooks/useDebounce.ts` | Hook | 防抖Hook |
+| `src/shared/constants/themes.ts` | 常量 | 主题预设定义 |
+| `src/shared/constants/config.ts` | 常量 | 配置常量 |
+| `src/styles/globals.css` | 样式 | 全局样式 |
+
+---
+
+## 6. 相关文档
+
+- [总览](./00-overview.md)
 - [技术架构设计](./10-architecture.md)
 - [类型定义规范](./11-types.md)
 - [组件设计规范](./12-components.md)
 - [Phase 2: 核心UI组件](./02-phase2-core-ui.md)
+- [后端Phase 2: 通信适配层](../backend/02-phase2-adaptation.md) ← BridgeManager注入ccBackend

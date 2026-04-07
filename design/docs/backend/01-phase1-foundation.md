@@ -1,5 +1,21 @@
 # Phase 1: 基础设施与数据模型 (Foundation)
 
+> **⚠️ SDK集成架构注释 (2026-04-08)**
+>
+> Phase 1 的数据模型和基础设施组件基本不受SDK集成影响，但以下几项需要注意：
+>
+> ### 受影响的模型/组件
+>
+> | 组件 | 影响说明 |
+> |------|----------|
+> | `AIProvider` 接口 + `ChatRequest`/`ChatResponse` | **降级为辅助类型**。SDK架构下不再直接调用HTTP API，但保留这些类型用于内部消息传递。`ChatChunk` 在 `ChatOrchestrator` → JCEF 之间仍用作流式传输单元 |
+> | `ModelConfig.apiKey` 字段 | SDK通过环境变量 `ANTHROPIC_API_KEY` 管理认证，`apiKey` 字段实际不在插件中使用。保留以兼容配置UI |
+> | `SecureStorage` | **用途缩减**。SDK自行管理API密钥认证，SecureStorage 仅用于存储非SDK配置（如自定义Provider的密钥，如果将来需要） |
+> | `ConfigStorage.State` | **缺失字段修复**：`topP` 字段未持久化（与 `ModelConfig.topP` 不对应），`checkpointEnabled` 未在 `fromAppConfig()` 中回写。实现时需补齐 |
+> | `EventBus.publish()` | **实现Bug**：如果 `subscribe()` 尚未被调用，`publish()` 会静默丢弃事件。实现时需在 `publish()` 中使用 `getOrPut` 确保 channel 存在 |
+> | `ChatSession` data class | `updatedAt: var` 和 `isActive: var` 混用 `val`/`var`，`equals()/hashCode()` 行为可能不符预期。建议将这两个字段移到 `metadata` 或使用单独的状态管理 |
+> | `SkillVariable.defaultValue: Any?` | Gson 反序列化会产生 `LinkedTreeMap` 而非实际类型，运行时可能 `ClassCastException`。建议改为 `String?` 或添加 TypeAdapter |
+
 **优先级**: P0 (最高，所有后续Phase的基础)
 **预估工期**: 8人天
 **前置依赖**: 无

@@ -1,7 +1,8 @@
 # ClaudeCodeJet v3.0 后端开发总览
 
-**文档版本**: 1.0
+**文档版本**: 2.0
 **创建日期**: 2026-04-08
+**最后修订**: 2026-04-08（SDK集成架构修订）
 **基包路径**: `com.github.xingzhewa.ccgui`
 **目标平台**: IntelliJ IDEA 2025.2+ (sinceBuild=252)
 **JVM版本**: 21
@@ -75,26 +76,28 @@ src/main/kotlin/com/github/xingzhewa/ccgui/
 ### 2.1 分层架构图
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Presentation Layer                          │
-│  (已有: MyToolWindowFactory, CefBrowserPanel)                   │
-│  (不在后端范围，但需提供接口)                                     │
-├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                           │
-│  ChatOrchestrator  │  SessionManager  │  ConfigHotReload        │
-│  StreamingEngine   │  InteractiveEngine│  PromptOptimizer       │
-│  TaskProgressTracker│ ContextProvider │  ConversationModeMgr   │
-├─────────────────────────────────────────────────────────────────┤
-│                     Adaptation Layer                            │
-│  BridgeManager     │  StdioBridge     │  MessageParser          │
-│  StreamingParser   │  ProcessPool     │  MultiProviderAdapter   │
-│  ModelSwitcher     │  VersionDetector │                         │
-├─────────────────────────────────────────────────────────────────┤
-│                     Infrastructure Layer                        │
-│  EventBus          │  SecureStorage   │  StateManager           │
-│  CacheManager      │  ErrorRecovery   │  MetricsCollector       │
-│  Logger            │  Persistence     │  PluginDisposable       │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Presentation Layer                                │
+│   MyToolWindowFactory │ CefBrowserPanel(JCEF) │ React Frontend          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                        Application Layer                                │
+│   ChatOrchestrator  │  SessionManager      │  ConfigHotReload           │
+│   StreamingEngine   │  InteractiveEngine   │  PromptOptimizer           │
+│   TaskProgressTracker│ ContextProvider     │  ConversationModeMgr       │
+│   ThemeManager      │  ModelInfoProvider   │  ScopeManager              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                        Adaptation Layer                                  │
+│   ★ ClaudeCodeClient │ StreamJsonParser   │  SdkConfigBuilder          │
+│   SdkSessionManager │  SdkPermissionHandler│  ModelInfoRegistry        │
+│   BridgeManager(委托)│ VersionDetector    │  MessageParser(辅助)       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                        Infrastructure Layer                              │
+│   EventBus          │  SecureStorage      │  StateManager              │
+│   CacheManager      │  ErrorRecovery      │  MetricsCollector          │
+│   Logger            │  ConfigStorage      │  SessionStorage            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+★ = 核心关键路径：ClaudeCodeClient 通过 ProcessBuilder 调用 claude CLI 子进程
 ```
 
 ### 2.2 后端包结构规划
@@ -157,19 +160,27 @@ com.github.xingzhewa.ccgui/
 │
 ├── adaptation/                        # 适配层
 │   ├── bridge/
-│   │   ├── BridgeManager.kt          # CLI桥接管理器
-│   │   ├── StdioBridge.kt           # stdio通信
+│   │   ├── BridgeManager.kt          # CLI桥接管理器(委托SDK)
+│   │   ├── StdioBridge.kt           # stdio通信(重构为stream-json)
 │   │   ├── StreamCallback.kt        # 流式回调接口
 │   │   ├── SimpleStreamCallback.kt   # 流式回调基类
 │   │   └── ProcessPool.kt           # 进程池
 │   ├── parser/
-│   │   ├── MessageParser.kt          # 消息解析器
+│   │   ├── MessageParser.kt          # 消息解析器(辅助)
 │   │   └── StreamingResponseParser.kt # 流式响应解析
-│   ├── provider/
-│   │   ├── MultiProviderAdapter.kt   # 多供应商适配
-│   │   ├── AnthropicProvider.kt      # Anthropic实现
-│   │   ├── OpenAIProvider.kt         # OpenAI实现
-│   │   └── DeepSeekProvider.kt       # DeepSeek实现
+│   ├── sdk/                           # ★ Claude Code SDK集成(P0关键路径)
+│   │   ├── ClaudeCodeClient.kt       # SDK核心客户端(服务) — 替代HTTP API
+│   │   ├── StreamJsonParser.kt       # stream-json协议解析
+│   │   ├── SdkMessageTypes.kt        # SDK消息类型(init/user/assistant/result)
+│   │   ├── SdkConfigBuilder.kt       # CLI参数和MCP配置构建
+│   │   ├── SdkSessionManager.kt      # SDK会话管理(--resume)
+│   │   ├── SdkPermissionHandler.kt   # 权限处理(--permission-prompt-tool)
+│   │   └── ModelInfoRegistry.kt      # 模型信息注册表(替代MultiProviderAdapter)
+│   ├── provider/                      # [已废弃] 直接HTTP调用由SDK替代
+│   │   ├── MultiProviderAdapter.kt   # → 替代为 ModelInfoRegistry
+│   │   ├── AnthropicProvider.kt      # 废弃 — SDK统一管理
+│   │   ├── OpenAIProvider.kt         # 废弃
+│   │   └── DeepSeekProvider.kt       # 废弃
 │   └── version/
 │       └── VersionDetector.kt        # 版本探测
 │
@@ -241,6 +252,12 @@ com.github.xingzhewa.ccgui/
 **产出**: BridgeManager可用，ToolWindow可编译运行
 **详见**: [02-phase2-adaptation.md](02-phase2-adaptation.md)
 
+### Phase 2.5: Claude Code SDK 集成 (SDK Integration) — ★ 关键路径
+**目标**: 以Claude Code CLI子进程模式集成SDK，替代错误的直接HTTP API调用
+**产出**: ClaudeCodeClient可发送消息、接收流式回复、管理会话
+**详见**: [02-phase2.5-claude-code-sdk.md](02-phase2.5-claude-code-sdk.md)
+**重要**: 此阶段废弃Phase 2中的AnthropicProvider/OpenAIProvider/DeepSeekProvider
+
 ### Phase 3: 核心应用服务 (Core Services)
 **目标**: 实现ChatOrchestrator、SessionManager、StreamingEngine等核心服务
 **产出**: 完整的聊天流程可工作
@@ -270,7 +287,9 @@ Phase 1 (Foundation)
     ↓
 Phase 2 (Adaptation) ← 依赖Phase 1的model和infrastructure
     ↓
-Phase 3 (Core Services) ← 依赖Phase 2的Bridge和Parser
+Phase 2.5 (SDK Integration) ← ★ 关键路径，修正Phase 2的API调用方案
+    ↓
+Phase 3 (Core Services) ← 依赖Phase 2.5的ClaudeCodeClient
     ↓
 Phase 4 (Features) ← 依赖Phase 3的Core Services
     ↓
@@ -317,11 +336,13 @@ Phase 6 (Optimization) ← 依赖所有功能完成
 
 | 决策项 | 选择 | 原因 |
 |--------|------|------|
+| **AI交互方式** | **Claude Code SDK (CLI子进程)** | **插件定位为Claude Code的GUI前端，必须通过SDK集成** |
 | JSON库 | Gson | 项目已引入，与平台一致 |
-| HTTP客户端 | Ktor HttpClient | 轻量、协程原生支持 |
 | 状态管理 | StateFlow | 响应式，线程安全 |
-| 进程通信 | stdin/stdout | Claude Code CLI标准协议 |
+| CLI通信 | `claude -p --output-format stream-json` | SDK标准协议，NDJSON格式 |
 | 持久化 | PersistentStateComponent | IntelliJ原生机制 |
-| 加密存储 | PasswordSafe | IntelliJ原生API |
+| 加密存储 | PasswordSafe | IntelliJ原生API（仅存非SDK密钥） |
 | 事件系统 | 自研EventBus | 轻量级，解耦模块 |
 | 测试框架 | JUnit 5 + MockK | Kotlin友好 |
+
+> **重要**: ~~Ktor HttpClient~~ 不再需要。所有AI交互通过 `ClaudeCodeClient` → `claude` CLI 子进程完成，不直接调用任何AI供应商的REST API。

@@ -6,16 +6,19 @@
 
 ---
 
-## 📋 目录
+## 目录
 
 - [1. 核心类型定义](#1-核心类型定义)
 - [2. 聊天相关类型](#2-聊天相关类型)
-- [3. 会话相关类型](#4-会话相关类型)
-- [4. 主题相关类型](#5-主题相关类型)
-- [5. 生态相关类型](#6-生态相关类型)
-- [6. 通信桥接类型](#7-通信桥接类型)
-- [7. UI状态类型](#8-ui状态类型)
-- [8. 工具类型](#9-工具类型)
+- [3. 会话相关类型](#3-会话相关类型)
+- [4. 主题相关类型](#4-主题相关类型)
+- [5. 生态相关类型](#5-生态相关类型)
+- [6. 交互式请求类型](#6-交互式请求类型)
+- [7. 任务进度类型](#7-任务进度类型)
+- [8. 通信桥接类型](#8-通信桥接类型)
+- [9. UI状态类型](#9-ui状态类型)
+- [10. 工具类型](#10-工具类型)
+- [11. 类型导出索引](#11-类型导出索引)
 
 ---
 
@@ -37,28 +40,7 @@ export type ID = string;
 export type Timestamp = number;
 
 /**
- * 可选类型（所有属性可选）
- */
-export type Partial<T> = {
-  [P in keyof T]?: T[P];
-};
-
-/**
- * 必需类型（所有属性必需）
- */
-export type Required<T> = {
-  [P in keyof T]-?: T[P];
-};
-
-/**
- * 只读类型
- */
-export type Readonly<T> = {
-  readonly [P in keyof T]: T[P];
-};
-
-/**
- * 提取类型
+ * 提取类型（美化类型显示）
  */
 export type Prettify<T> = {
   [K in keyof T]: T[K];
@@ -1062,6 +1044,12 @@ export interface JavaBackendAPI {
    * 提交问题答案
    */
   submitAnswer(questionId: string, answer: any): Promise<void>;
+
+  // ========== 底层通信 ==========
+  /**
+   * 底层请求-响应通信（由JavaBridge封装层内部使用，不直接在业务代码中调用）
+   */
+  send(request: { queryId: number; action: string; params?: any }): void;
 }
 
 /**
@@ -1089,22 +1077,37 @@ export interface JavaEventsAPI {
  */
 export interface ConfigState {
   theme: ThemeConfig;
-  modelConfig: ModelConfig;
+  modelConfig: ModelConfig; // 定义见 session.ts (3. 会话相关类型)
   skills: Skill[];
   mcpServers: McpServer[];
   version: number;
 }
 
 /**
- * 模型配置
+ * Java流式输出接口（可选，由Java注入）
  */
-export interface ModelConfig {
-  provider: string;
-  model: string;
-  maxTokens: number;
-  temperature: number;
-  topP: number;
+export interface CcStreamingAPI {
+  onChunk(chunk: string): void;
+  onDone(): void;
+  onError(error: string): void;
 }
+
+/**
+ * 全局类型扩展
+ *
+ * Java后端通过JCEF注入的全局对象类型声明。
+ * ccBackend/ccEvents 由后端BridgeManager注入。
+ * ccStreaming 为可选接口，仅在流式输出场景中使用。
+ */
+declare global {
+  interface Window {
+    ccBackend: JavaBackendAPI;
+    ccEvents: JavaEventsAPI;
+    ccStreaming?: CcStreamingAPI;
+  }
+}
+
+export {};
 ```
 
 ---
@@ -1273,21 +1276,11 @@ export type If<C extends boolean, T, F> = C extends true ? T : F;
 /**
  * 是否字面量类型
  */
-export type IsLiteral<T> = extends T
+export type IsLiteral<T> = string extends T
   ? never
   : [T] extends [boolean]
   ? never
   : true;
-
-/**
- * 提取函数参数
- */
-export type Parameters<T extends (...args: any) => any> = T extends (...args: infer P) => any ? P : never;
-
-/**
- * 提取函数返回值
- */
-export type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any;
 
 /**
  * 提取Promise返回值
