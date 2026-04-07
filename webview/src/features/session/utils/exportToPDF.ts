@@ -125,7 +125,7 @@ function generateSessionHTML(session: ChatSession): string {
           ${messagesHTML}
         </div>
         <div class="footer">
-          <p>Exported from ClaudeCodeJet on ${escapeHtml(new Date().toLocaleString())}</p>
+          <p>Exported from CC Assistant on ${escapeHtml(new Date().toLocaleString())}</p>
         </div>
       </body>
     </html>

@@ -12,7 +12,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 /**
  * 代码测试生成操作
  *
- * 在编辑器中选中代码后，右键菜单 → "生成测试" → 打开 CCGUI 工具窗口并发送测试生成请求
+ * 在编辑器中选中代码后，右键菜单 → "生成测试" → 打开 CC Assistant 工具窗口并发送测试生成请求
  */
 class CodeTestAction : AnAction() {
 
@@ -70,7 +70,7 @@ class CodeTestAction : AnAction() {
     private fun openToolWindow(project: Project) {
         val toolWindowManager = ToolWindowManager.getInstance(project)
         val toolWindow = toolWindowManager.getToolWindow("CCGUI") ?: run {
-            log.warn("CCGUI tool window not found")
+            log.warn("CC Assistant tool window not found")
             return
         }
 

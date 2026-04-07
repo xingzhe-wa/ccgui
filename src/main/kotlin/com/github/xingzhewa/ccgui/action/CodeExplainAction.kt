@@ -15,7 +15,7 @@ import com.intellij.psi.PsiFile
 /**
  * 代码解释操作
  *
- * 在编辑器中选中代码后，右键菜单 → "解释代码" → 打开 CCGUI 工具窗口并发送解释请求
+ * 在编辑器中选中代码后，右键菜单 → "解释代码" → 打开 CC Assistant 工具窗口并发送解释请求
  */
 class CodeExplainAction : AnAction() {
 
@@ -75,12 +75,12 @@ class CodeExplainAction : AnAction() {
     }
 
     /**
-     * 打开 CCGUI 工具窗口
+     * 打开 CC Assistant 工具窗口
      */
     private fun openToolWindow(project: Project) {
         val toolWindowManager = ToolWindowManager.getInstance(project)
         val toolWindow = toolWindowManager.getToolWindow("CCGUI") ?: run {
-            log.warn("CCGUI tool window not found")
+            log.warn("CC Assistant tool window not found")
             return
         }
 

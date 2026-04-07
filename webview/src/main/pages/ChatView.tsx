@@ -42,6 +42,7 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [references, setReferences] = useState<MessageReference[]>([]);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
+  const [quickActionsExpanded, setQuickActionsExpanded] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 响应式：监听容器宽度变化，窄屏时隐藏详情面板
@@ -95,15 +96,17 @@ export const ChatView = memo(function ChatView(): JSX.Element {
       startStreaming(aiMessageId);
 
       // 通过 JavaBridge 通信层发送，不直接调用 window.ccBackend
+      // 包含 messageId 以便 Java 在流式事件中返回该 ID
       if (attachments && attachments.length > 0) {
         javaBridge.sendMultimodalMessage({
           sessionId: currentSessionId,
           content: fullContent,
-          attachments
+          attachments,
+          messageId: aiMessageId
         });
       } else {
         javaBridge.sendMessage(
-          JSON.stringify({ sessionId: currentSessionId, content: fullContent })
+          JSON.stringify({ sessionId: currentSessionId, content: fullContent, messageId: aiMessageId })
         );
       }
 
@@ -160,7 +163,60 @@ export const ChatView = memo(function ChatView(): JSX.Element {
 
   const handleQuickAction = useCallback(
     (action: string) => {
-      handleSend(action);
+      // 构建结构化的 prompt，而非直接发送 action ID
+      const selectedText = ''; // TODO: 从编辑器获取选中代码
+      const actionPrompts: Record<string, string> = {
+        explain: `请解释以下代码的功能、关键逻辑和潜在问题：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\`
+
+请提供：
+1. 代码功能概述
+2. 关键逻辑分析
+3. 潜在问题或改进建议`,
+        optimize: `请优化以下代码，提高性能和可读性：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\`
+
+请提供优化后的代码和优化说明。`,
+        polish: `请润色以下代码，使其表达更清晰：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\``,
+        translate: `请翻译以下代码注释为中文（如果已是中文则转为英文）：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\``,
+        review: `请对以下代码进行质量审查：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\`
+
+请检查：
+1. 代码规范遵循情况
+2. 潜在 Bug
+3. 安全风险
+4. 性能问题`,
+        debug: `请分析以下代码并添加合适的调试代码：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\``,
+        test: `请为以下代码生成单元测试：
+
+\`\`\`
+${selectedText || "(未选中代码)"}
+\`\`\``
+      };
+      const prompt = actionPrompts[action] || action;
+      handleSend(prompt);
     },
     [handleSend]
   );
@@ -173,12 +229,19 @@ export const ChatView = memo(function ChatView(): JSX.Element {
     [setAnswer, submitAnswer]
   );
 
+  // 响应式布局：根据宽度计算布局模式
+  // PRD: <800px 单列 / 800-1200px 60:40 分栏 / >1200px 50:50 分栏
+  const layoutMode = containerWidth < 800 ? 'single' : containerWidth <= 1200 ? 'medium' : 'large';
+
+  const messageListWidth = layoutMode === 'single' ? 'w-full' : layoutMode === 'medium' ? 'w-[60%]' : 'w-[50%]';
+  const detailWidth = layoutMode === 'single' ? 'w-0' : layoutMode === 'medium' ? 'w-[40%]' : 'w-[50%]';
+
   return (
     <div ref={containerRef} className="flex h-full flex-col">
       {/* 主内容区（消息列表 + 预览面板） */}
       <div className="flex flex-1 overflow-hidden">
         {/* 消息列表 */}
-        <div className="flex-1 overflow-hidden">
+        <div className={`${messageListWidth} overflow-hidden flex-shrink-0`}>
           <MessageList
             messages={messages}
             onReply={handleReply}
@@ -190,9 +253,9 @@ export const ChatView = memo(function ChatView(): JSX.Element {
           />
         </div>
 
-        {/* 消息详情面板 - 响应式：窄屏(<768px)时隐藏 */}
-        {selectedMessage && containerWidth >= 768 && (
-          <div className="w-80 border-l overflow-hidden flex-shrink-0">
+        {/* 消息详情面板 - 响应式断点：单列模式隐藏 / 中屏 40% / 大屏 50% */}
+        {selectedMessage && layoutMode !== 'single' && (
+          <div className={`${detailWidth} border-l overflow-hidden flex-shrink-0`}>
             <MessageDetail
               message={selectedMessage}
               onClose={() => setSelectedMessageId(null)}
@@ -232,12 +295,14 @@ export const ChatView = memo(function ChatView(): JSX.Element {
         </div>
       )}
 
-      {/* 快捷操作（无消息时显示） */}
-      {messages.length === 0 && !isStreaming && (
-        <div className="border-t px-4 py-3">
-          <QuickActionsPanel onAction={handleQuickAction} />
-        </div>
-      )}
+      {/* 快捷操作（始终显示在输入区域上方） */}
+      <div className="border-t px-4 py-3">
+        <QuickActionsPanel
+          onAction={handleQuickAction}
+          expanded={quickActionsExpanded}
+          onToggle={() => setQuickActionsExpanded(!quickActionsExpanded)}
+        />
+      </div>
 
       {/* 输入区域 */}
       <div className="border-t px-4 py-3">

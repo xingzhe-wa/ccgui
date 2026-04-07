@@ -4,6 +4,8 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // 重要：使用相对路径，使 file:// URL 加载时能正确解析资源
+  base: './',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

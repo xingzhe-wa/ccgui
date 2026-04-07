@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class CefBrowserPanel(private val project: Project) : Disposable {
 
     private val log = logger<CefBrowserPanel>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** JCEF 浏览器实例 */
     private var browser: JBCefBrowser? = null
@@ -52,6 +52,15 @@ class CefBrowserPanel(private val project: Project) : Disposable {
 
     /** JS 调用后端的全局函数引用，由 injectBackendJavaScript() 设置 */
     private var jsQueryInvoker: java.util.function.Function<String, JBCefJSQuery.Response>? = null
+
+    /** 页面加载完成标志 */
+    private var isPageLoaded = false
+
+    /** 页面加载完成监听器列表 */
+    private val loadListeners = mutableListOf<Runnable>()
+
+    /** 页面加载监听器是否已设置 */
+    private var loadListenerSetup = false
 
     /** BridgeManager */
     private val bridgeManager: BridgeManager by lazy { BridgeManager.getInstance(project) }
@@ -106,10 +115,69 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         // 设置 JS 查询回调
         setupJsQuery()
 
+        // 设置页面加载监听
+        setupLoadListener()
+
         isInitialized = true
         log.info("CefBrowserPanel initialized")
 
         return browser!!
+    }
+
+    /**
+     * 设置页面加载监听
+     * 使用 JBCefClient 的 addLoadHandler 回调
+     */
+    private fun setupLoadListener() {
+        if (loadListenerSetup) return
+        browser?.let { b ->
+            try {
+                val client = b.jbCefClient
+                // 使用反射查找合适的 load handler 接口
+                val handlerClass = Class.forName("org.cef.handler.CefLoadHandler")
+                val handler = java.lang.reflect.Proxy.newProxyInstance(
+                    handlerClass.classLoader,
+                    arrayOf(handlerClass)
+                ) { _, method, args ->
+                    when (method.name) {
+                        "onLoadingStateChange" -> {
+                            if (args.size >= 4) {
+                                val isLoading = args[0] as Boolean
+                                val url = args[1] as String
+                                if (!isLoading && url.isNotEmpty()) {
+                                    log.debug("Page loaded: $url")
+                                    isPageLoaded = true
+                                    loadListeners.forEach { it.run() }
+                                    loadListeners.clear()
+                                }
+                            }
+                            null
+                        }
+                        else -> null
+                    }
+                }
+                val addLoadHandlerMethod = client.javaClass.getMethod(
+                    "addLoadHandler",
+                    Class.forName("org.cef.handler.CefLoadHandler"),
+                    Class.forName("org.cef.browser.CefBrowser")
+                )
+                addLoadHandlerMethod.invoke(client, handler, b.getCefBrowser())
+                loadListenerSetup = true
+            } catch (e: Exception) {
+                log.warn("Failed to setup load listener: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 等待页面加载完成后执行
+     */
+    private fun executeWhenPageLoaded(runnable: Runnable) {
+        if (isPageLoaded) {
+            runnable.run()
+        } else {
+            loadListeners.add(runnable)
+        }
     }
 
     /**
@@ -152,6 +220,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 "getConfig" -> handleGetConfig(queryId, params)
                 "setConfig" -> handleSetConfig(queryId, params)
                 "updateConfig" -> handleUpdateConfig(queryId, params)
+                "getModelConfig" -> handleGetModelConfig(queryId, params)
+                "updateModelConfig" -> handleUpdateModelConfig(queryId, params)
                 "updateTheme" -> handleUpdateTheme(queryId, params)
                 "getThemes" -> handleGetThemes(queryId)
                 "saveCustomTheme" -> handleSaveCustomTheme(queryId, params)
@@ -220,10 +290,33 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     // ---- Action Handlers ----
 
     private fun handleSendMessage(queryId: Int, params: com.google.gson.JsonElement?): Any? {
-        val jsonParams = params?.asJsonObject
-        // 前端发送 { sessionId, content } — 解析 sessionId 和 content
-        val sessionId = jsonParams?.get("sessionId")?.asString ?: ""
-        val content = jsonParams?.get("content")?.asString ?: params?.asString ?: ""
+        // 解析前端发送的参数：可能是 { message: "{...}" } 或直接是 {...}
+        var sessionId = ""
+        var content = ""
+        var messageId = ""
+
+        if (params?.isJsonObject == true) {
+            val jsonParams = params.asJsonObject
+            // 检查是否有 message 字段（JSON 字符串格式）
+            val messageStr = jsonParams.get("message")?.asString
+            if (messageStr != null) {
+                // 解析内层 JSON
+                val payload = JsonUtils.parseObject(messageStr)?.asJsonObject
+                sessionId = payload?.get("sessionId")?.asString ?: ""
+                content = payload?.get("content")?.asString ?: ""
+                messageId = payload?.get("messageId")?.asString ?: ""
+            } else {
+                // 直接字段格式
+                sessionId = jsonParams.get("sessionId")?.asString ?: ""
+                content = jsonParams.get("content")?.asString ?: ""
+                messageId = jsonParams.get("messageId")?.asString ?: ""
+            }
+        } else {
+            content = params?.asString ?: ""
+        }
+
+        // 保存 messageId 到线程上下文，供流式回调使用
+        val contextMessageId = messageId.ifEmpty { "default" }
 
         bridgeManager.sendMessage(
             message = content,
@@ -231,17 +324,17 @@ class CefBrowserPanel(private val project: Project) : Disposable {
             callback = object : com.github.xingzhewa.ccgui.bridge.StreamCallback {
                 override fun onLineReceived(line: String) {
                     // JS EventBus.STREAMING_CHUNK = "streaming:chunk"
-                    sendToJavaScript("streaming:chunk", mapOf("chunk" to line))
+                    sendToJavaScript("streaming:chunk", mapOf("messageId" to contextMessageId, "chunk" to line))
                 }
 
                 override fun onStreamComplete(messages: List<String>) {
                     // JS EventBus.STREAMING_COMPLETE = "streaming:complete"
-                    sendToJavaScript("streaming:complete", mapOf("messages" to messages))
+                    sendToJavaScript("streaming:complete", mapOf("messageId" to contextMessageId, "messages" to messages))
                 }
 
                 override fun onStreamError(error: String) {
                     // JS EventBus.STREAMING_ERROR = "streaming:error"
-                    sendToJavaScript("streaming:error", mapOf("error" to error))
+                    sendToJavaScript("streaming:error", mapOf("messageId" to contextMessageId, "error" to error))
                 }
             },
             // 流结束后通过 'response' 事件 resolve/reject 前端 javaBridge.invoke() 的 promise
@@ -253,24 +346,44 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     }
 
     private fun handleStreamMessage(queryId: Int, params: com.google.gson.JsonElement?): Any? {
-        val jsonParams = params?.asJsonObject
-        val sessionId = jsonParams?.get("sessionId")?.asString ?: ""
-        val content = jsonParams?.get("content")?.asString ?: params?.asString ?: ""
+        // 解析参数（与 handleSendMessage 相同）
+        var sessionId = ""
+        var content = ""
+        var messageId = ""
+
+        if (params?.isJsonObject == true) {
+            val jsonParams = params.asJsonObject
+            val messageStr = jsonParams.get("message")?.asString
+            if (messageStr != null) {
+                val payload = JsonUtils.parseObject(messageStr)?.asJsonObject
+                sessionId = payload?.get("sessionId")?.asString ?: ""
+                content = payload?.get("content")?.asString ?: ""
+                messageId = payload?.get("messageId")?.asString ?: ""
+            } else {
+                sessionId = jsonParams.get("sessionId")?.asString ?: ""
+                content = jsonParams.get("content")?.asString ?: ""
+                messageId = jsonParams.get("messageId")?.asString ?: ""
+            }
+        } else {
+            content = params?.asString ?: ""
+        }
+
+        val contextMessageId = messageId.ifEmpty { "default" }
 
         bridgeManager.streamMessage(
             message = content,
             sessionId = sessionId,
             callback = object : com.github.xingzhewa.ccgui.bridge.StreamCallback {
                 override fun onLineReceived(line: String) {
-                    sendToJavaScript("streaming:chunk", mapOf("chunk" to line))
+                    sendToJavaScript("streaming:chunk", mapOf("messageId" to contextMessageId, "chunk" to line))
                 }
 
                 override fun onStreamComplete(messages: List<String>) {
-                    sendToJavaScript("streaming:complete", mapOf("messages" to messages))
+                    sendToJavaScript("streaming:complete", mapOf("messageId" to contextMessageId, "messages" to messages))
                 }
 
                 override fun onStreamError(error: String) {
-                    sendToJavaScript("streaming:error", mapOf("error" to error))
+                    sendToJavaScript("streaming:error", mapOf("messageId" to contextMessageId, "error" to error))
                 }
             },
             onResponse = { result, error ->
@@ -449,6 +562,40 @@ class CefBrowserPanel(private val project: Project) : Disposable {
             }
         )
         return null
+    }
+
+    // ---- Model Config ----
+
+    private fun handleGetModelConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val config = configManager.getAppConfig()
+        val modelConfig = config.modelConfig
+        return mapOf(
+            "provider" to modelConfig.provider,
+            "model" to modelConfig.model,
+            "apiKey" to (modelConfig.apiKey ?: ""),
+            "baseUrl" to (modelConfig.baseUrl ?: ""),
+            "maxTokens" to modelConfig.maxTokens,
+            "temperature" to modelConfig.temperature,
+            "topP" to modelConfig.topP,
+            "maxRetries" to modelConfig.maxRetries
+        )
+    }
+
+    private fun handleUpdateModelConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val current = configManager.getAppConfig()
+        val updatedModelConfig = com.github.xingzhewa.ccgui.model.config.ModelConfig(
+            provider = jsonObj.get("provider")?.asString ?: current.modelConfig.provider,
+            model = jsonObj.get("model")?.asString ?: current.modelConfig.model,
+            apiKey = jsonObj.get("apiKey")?.asString?.takeIf { it.isNotEmpty() } ?: current.modelConfig.apiKey,
+            baseUrl = jsonObj.get("baseUrl")?.asString?.takeIf { it.isNotEmpty() } ?: current.modelConfig.baseUrl,
+            maxTokens = jsonObj.get("maxTokens")?.asInt ?: current.modelConfig.maxTokens,
+            temperature = jsonObj.get("temperature")?.asDouble ?: current.modelConfig.temperature,
+            topP = jsonObj.get("topP")?.asDouble ?: current.modelConfig.topP,
+            maxRetries = jsonObj.get("maxRetries")?.asInt ?: current.modelConfig.maxRetries
+        )
+        configManager.updateModelConfig(updatedModelConfig)
+        return mapOf("success" to true)
     }
 
     // ---- Config ----
@@ -872,6 +1019,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                     };
 
                     // ccEvents：事件总线，Kotlin sendToJavaScript() 直接调用
+                    // 同时使用 CustomEvent 桥接到前端 eventBus
                     window.ccEvents = {
                         handlers: {},
                         on: function(event, handler) {
@@ -892,6 +1040,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                             if (this.handlers[event]) {
                                 this.handlers[event].forEach(function(h) { h(data); });
                             }
+                            // 桥接到前端 CustomEvent（让 eventBus 监听 window 事件）
+                            window.dispatchEvent(new CustomEvent(event, { detail: data }));
                         }
                     };
                 })();
@@ -993,10 +1143,17 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      * 加载 HTML 页面
      */
     fun loadHtmlPage(url: String) {
+        // 重置加载状态
+        isPageLoaded = false
         browser?.loadURL(url)
-        // 页面加载后注入 Bridge（延迟确保 DOM 就绪）
-        browser?.let { b ->
-            java.awt.EventQueue.invokeLater {
+        // 等待页面加载完成后注入 Bridge（带后备超时）
+        executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+        // 后备：如果3秒后仍未加载完成，强制注入
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (!isPageLoaded) {
+                log.warn("Page load timeout, forcing bridge injection")
+                isPageLoaded = true
                 injectBackendJavaScript()
             }
         }
@@ -1006,10 +1163,19 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      * 加载本地 HTML 内容
      */
     fun loadHtmlContent(htmlContent: String, baseUrl: String = "http://localhost/") {
+        // 重置加载状态
+        isPageLoaded = false
         browser?.loadHTML(htmlContent, baseUrl)
-        // HTML 内容加载后注入 Bridge
-        java.awt.EventQueue.invokeLater {
-            injectBackendJavaScript()
+        // 等待页面加载完成后注入 Bridge（带后备超时）
+        executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+        // 后备：如果3秒后仍未加载完成，强制注入
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (!isPageLoaded) {
+                log.warn("Page load timeout, forcing bridge injection")
+                isPageLoaded = true
+                injectBackendJavaScript()
+            }
         }
     }
 

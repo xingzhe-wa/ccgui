@@ -1,5 +1,5 @@
 /**
- * ClaudeCodeJet 前端类型定义导出索引
+ * CC Assistant 前端类型定义导出索引
  *
  * 所有类型必须从 @/@shared/types 导入
  * 类型引用优先级: 11-types.md > 10-architecture.md > 12-components.md > Phase 文档

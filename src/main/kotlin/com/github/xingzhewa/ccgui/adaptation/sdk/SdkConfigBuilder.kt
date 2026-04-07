@@ -135,7 +135,7 @@ class SdkConfigBuilder(private val project: Project) {
      */
     fun buildDefaultSystemPrompt(): String {
         return buildString {
-            append("You are Claude, an AI assistant integrated into JetBrains IDE via ClaudeCodeJet (ccgui) plugin. ")
+            append("You are Claude, an AI assistant integrated into JetBrains IDE via CC Assistant plugin. ")
             append("You help developers with coding, debugging, refactoring, and other software engineering tasks. ")
             append("Provide clear, concise, and actionable responses. ")
             append("When generating code, always include the language identifier in code blocks. ")

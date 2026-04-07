@@ -40,6 +40,15 @@ class ConfigManager(private val project: Project) : Disposable {
     }
 
     /**
+     * 更新模型配置
+     */
+    fun updateModelConfig(modelConfig: com.github.xingzhewa.ccgui.model.config.ModelConfig) {
+        val current = getAppConfig()
+        saveAppConfig(current.copy(modelConfig = modelConfig))
+        log.info("Model config updated: ${modelConfig.model}")
+    }
+
+    /**
      * 获取当前主题
      */
     fun getCurrentTheme(): ThemeConfig = configStorage.getCurrentTheme()

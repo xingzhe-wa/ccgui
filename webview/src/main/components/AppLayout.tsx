@@ -106,7 +106,7 @@ export const AppLayout = memo(function AppLayout(): JSX.Element {
             </svg>
           </button>
           {sidebarOpen && (
-            <span className="ml-3 text-sm font-semibold">ClaudeCodeJet</span>
+            <span className="ml-3 text-sm font-semibold">CC Assistant</span>
           )}
         </div>
 

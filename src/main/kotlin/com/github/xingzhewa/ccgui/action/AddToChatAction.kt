@@ -12,7 +12,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 /**
  * 添加到聊天操作
  *
- * 在编辑器中选中代码后，右键菜单 → "添加到聊天" → 打开 CCGUI 工具窗口并将选中内容作为用户消息发送
+ * 在编辑器中选中代码后，右键菜单 → "添加到聊天" → 打开 CC Assistant 工具窗口并将选中内容作为用户消息发送
  */
 class AddToChatAction : AnAction() {
 
@@ -70,7 +70,7 @@ class AddToChatAction : AnAction() {
     private fun openToolWindow(project: Project) {
         val toolWindowManager = ToolWindowManager.getInstance(project)
         val toolWindow = toolWindowManager.getToolWindow("CCGUI") ?: run {
-            log.warn("CCGUI tool window not found")
+            log.warn("CC Assistant tool window not found")
             return
         }
 

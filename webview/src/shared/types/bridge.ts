@@ -52,6 +52,34 @@ export interface JavaBackendAPI {
    */
   updateConfig(config: Partial<ConfigState>): Promise<void>;
 
+  /**
+   * 获取模型配置
+   */
+  getModelConfig(): Promise<{
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl: string;
+    maxTokens: number;
+    temperature: number;
+    topP: number;
+    maxRetries: number;
+  }>;
+
+  /**
+   * 更新模型配置
+   */
+  updateModelConfig(config: {
+    provider?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    maxTokens?: number;
+    temperature?: number;
+    topP?: number;
+    maxRetries?: number;
+  }): Promise<void>;
+
   // ========== 主题相关 ==========
   /**
    * 获取所有主题

@@ -1,7 +1,7 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.xingzhewa.ccgui</id>
-    <name>CCGUI</name>
+    <name>CC Assistant</name>
     <vendor>xingzhe-wa</vendor>
 
     <depends>com.intellij.modules.platform</depends>
@@ -13,8 +13,7 @@
         <toolWindow
             factoryClass="com.github.xingzhewa.ccgui.toolWindow.MyToolWindowFactory"
             id="CCGUI"
-            icon="META-INF/icons/ccgui_logo_13x13.png"
-            anchor="right"/>
+            icon="META-INF/icons/ccgui_logo_13x13.png"/>
 
         <!-- Project Services -->
         <projectService
@@ -128,7 +127,7 @@
             id="CCGUI.AddToChat"
             class="com.github.xingzhewa.ccgui.action.AddToChatAction"
             text="添加到聊天 (Add to Chat)"
-            description="将选中的代码添加到 CCGUI 聊天窗口">
+            description="将选中的代码添加到 CC Assistant 聊天窗口">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
     </actions>

@@ -159,6 +159,32 @@ class JavaBridge {
     return this.invoke('updateConfig', { config });
   }
 
+  async getModelConfig(): Promise<{
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl: string;
+    maxTokens: number;
+    temperature: number;
+    topP: number;
+    maxRetries: number;
+  }> {
+    return this.invoke('getModelConfig', {});
+  }
+
+  async updateModelConfig(config: {
+    provider?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    maxTokens?: number;
+    temperature?: number;
+    topP?: number;
+    maxRetries?: number;
+  }): Promise<void> {
+    return this.invoke('updateModelConfig', config);
+  }
+
   async getThemes(): Promise<any[]> {
     return this.invoke('getThemes');
   }

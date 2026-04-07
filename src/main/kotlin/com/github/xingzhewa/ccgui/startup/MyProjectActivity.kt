@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class MyProjectActivity : ProjectActivity, Disposable {
     private val log = logger<MyProjectActivity>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val pendingPermissions = ConcurrentHashMap<String, java.util.concurrent.CountDownLatch>()
     private var currentProject: Project? = null
 
@@ -84,7 +84,7 @@ class MyProjectActivity : ProjectActivity, Disposable {
         // 查找 CefBrowserPanel 实例（通过 ToolWindow）
         try {
             val toolWindowManager = com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
-            val toolWindow = toolWindowManager.getToolWindow("ClaudeCodeJet")
+            val toolWindow = toolWindowManager.getToolWindow("CCGUI")
             val cefPanel = toolWindow?.component?.getComponent(0)
             if (cefPanel is CefBrowserPanel) {
                 cefPanel.sendToJavaScript("streaming:question", mapOf(

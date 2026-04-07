@@ -14,7 +14,8 @@ data class AppConfig(
     val showLineNumbers: Boolean = true,
     val enableSpellCheck: Boolean = false,
     val maxSessionHistory: Int = 100,
-    val autoSaveInterval: Long = 30000L  // 30 秒
+    val autoSaveInterval: Long = 30000L,  // 30 秒
+    val toolWindowAnchor: String = "right"  // left / right / bottom
 ) {
 
     companion object {
@@ -35,7 +36,8 @@ data class AppConfig(
                 showLineNumbers = json.get("showLineNumbers")?.asBoolean ?: true,
                 enableSpellCheck = json.get("enableSpellCheck")?.asBoolean ?: false,
                 maxSessionHistory = json.get("maxSessionHistory")?.asInt ?: 100,
-                autoSaveInterval = json.get("autoSaveInterval")?.asLong ?: 30000L
+                autoSaveInterval = json.get("autoSaveInterval")?.asLong ?: 30000L,
+                toolWindowAnchor = json.get("toolWindowAnchor")?.asString ?: "right"
             )
         }
     }
@@ -54,6 +56,7 @@ data class AppConfig(
             addProperty("enableSpellCheck", enableSpellCheck)
             addProperty("maxSessionHistory", maxSessionHistory)
             addProperty("autoSaveInterval", autoSaveInterval)
+            addProperty("toolWindowAnchor", toolWindowAnchor)
         }
     }
 }

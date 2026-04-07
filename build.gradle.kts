@@ -36,6 +36,12 @@ dependencies {
     // JSON 处理
     implementation("com.google.code.gson:gson:2.10.1")
 
+    // HTTP Client (for daemon communication)
+    implementation("io.ktor:ktor-client-core:2.3.7")
+    implementation("io.ktor:ktor-client-okhttp:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-gson:2.3.7")
+
     // JCEF (已包含在 IntelliJ Platform 中，无需额外依赖)
 
     testImplementation(libs.junit)

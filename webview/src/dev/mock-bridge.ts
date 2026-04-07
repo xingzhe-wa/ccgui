@@ -51,7 +51,7 @@ const mockMessages: ChatMessage[] = [
     id: 'msg-2',
     role: MessageRole.ASSISTANT,
     content:
-      '## 项目结构分析\n\n这是一个 IntelliJ IDEA 插件项目 **ClaudeCodeJet**，采用前后端分离架构：\n\n### 后端 (Kotlin)\n- `adaptation/sdk/` — Claude CLI 集成\n- `application/` — 业务逻辑层\n- `infrastructure/` — 基础设施（存储、事件总线、缓存）\n- `browser/` — JCEF 浏览器面板\n\n### 前端 (React + TypeScript)\n- `features/chat/` — 聊天组件\n- `features/session/` — 会话管理\n- `features/agents/` — Agent 管理\n- `features/skills/` — 技能模板\n\n```kotlin\nfun main() {\n    println("Hello from Kotlin!")\n}\n```\n\n> 该项目使用了 **JetBrains Platform SDK** 和 **JCEF** 技术栈。',
+      '## 项目结构分析\n\n这是一个 IntelliJ IDEA 插件项目 **CC Assistant**，采用前后端分离架构：\n\n### 后端 (Kotlin)\n- `adaptation/sdk/` — Claude CLI 集成\n- `application/` — 业务逻辑层\n- `infrastructure/` — 基础设施（存储、事件总线、缓存）\n- `browser/` — JCEF 浏览器面板\n\n### 前端 (React + TypeScript)\n- `features/chat/` — 聊天组件\n- `features/session/` — 会话管理\n- `features/agents/` — Agent 管理\n- `features/skills/` — 技能模板\n\n```kotlin\nfun main() {\n    println("Hello from Kotlin!")\n}\n```\n\n> 该项目使用了 **JetBrains Platform SDK** 和 **JCEF** 技术栈。',
     timestamp: Date.now() - 30000,
     status: MessageStatus.COMPLETED,
   },
@@ -398,6 +398,24 @@ const mockBackend: JavaBackendAPI = {
         case 'getThemes':
           mockEvents.emit('response', { queryId, result: mockThemes });
           break;
+        case 'getModelConfig':
+          mockEvents.emit('response', {
+            queryId,
+            result: {
+              provider: 'anthropic',
+              model: 'claude-sonnet-4-20250514',
+              apiKey: '',
+              baseUrl: '',
+              maxTokens: 8192,
+              temperature: 1.0,
+              topP: 0.999,
+              maxRetries: 3,
+            }
+          });
+          break;
+        case 'updateModelConfig':
+          mockEvents.emit('response', { queryId, result: { success: true } });
+          break;
         case 'createSession': {
           const name = typeof params === 'object' ? params?.name : 'New Session';
           const type = typeof params === 'object' ? params?.type : 'PROJECT';
@@ -433,6 +451,19 @@ const mockBackend: JavaBackendAPI = {
   getConfig: async (key: string) => ({ key, value: 'mock-value' }),
   setConfig: async () => {},
   updateConfig: async () => {},
+
+  // 模型配置
+  getModelConfig: async () => ({
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-20250514',
+    apiKey: '',
+    baseUrl: '',
+    maxTokens: 8192,
+    temperature: 1.0,
+    topP: 0.999,
+    maxRetries: 3,
+  }),
+  updateModelConfig: async () => {},
 
   // 主题
   getThemes: async (): Promise<ThemeConfig[]> => mockThemes,

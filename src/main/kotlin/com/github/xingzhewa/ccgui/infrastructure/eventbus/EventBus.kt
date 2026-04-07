@@ -31,7 +31,7 @@ import java.lang.ref.WeakReference
 object EventBus {
 
     private val logger = logger<EventBus>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _events = MutableSharedFlow<Event>(
         replay = 0,

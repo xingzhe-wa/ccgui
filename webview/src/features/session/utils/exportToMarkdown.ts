@@ -57,7 +57,7 @@ export function exportSessionToMarkdown(session: ChatSession): string {
     .map(formatMessageAsMarkdown)
     .join('\n---\n\n');
 
-  const footer = `\n\n---\n\n*Exported from ClaudeCodeJet on ${new Date().toLocaleString()}*`;
+  const footer = `\n\n---\n\n*Exported from CC Assistant on ${new Date().toLocaleString()}*`;
 
   return header + meta + divider + messages + footer;
 }
@@ -66,7 +66,7 @@ export function exportSessionToMarkdown(session: ChatSession): string {
  * 将多个会话导出为一个 Markdown 文件
  */
 export function exportSessionsToMarkdown(sessions: ChatSession[]): string {
-  const header = `# ClaudeCodeJet 会话导出\n\n`;
+  const header = `# CC Assistant 会话导出\n\n`;
   const timestamp = `**导出时间**: ${new Date().toLocaleString()}\n\n`;
   const count = `**会话数量**: ${sessions.length}\n\n---\n\n`;
 
