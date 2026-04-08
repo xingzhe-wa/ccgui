@@ -1,7 +1,6 @@
 package com.github.xingzhewa.ccgui.application.skill
 
 import com.github.xingzhewa.ccgui.application.orchestrator.ChatOrchestrator
-import com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SkillExecutedEvent
 import com.github.xingzhewa.ccgui.model.message.ChatMessage
@@ -14,11 +13,14 @@ import com.github.xingzhewa.ccgui.model.skill.SkillVariable
 import com.github.xingzhewa.ccgui.model.skill.VariableType
 import com.github.xingzhewa.ccgui.model.session.ChatSession
 import com.github.xingzhewa.ccgui.util.logger
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
@@ -35,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @param project IntelliJ项目实例
  */
 @Service(Service.Level.PROJECT)
-class SkillExecutor(private val project: Project) {
+class SkillExecutor(private val project: Project) : Disposable {
 
     private val log = logger<SkillExecutor>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -56,6 +58,7 @@ class SkillExecutor(private val project: Project) {
         var totalTime: Long = 0,
         var averageTime: Long = 0
     ) {
+        @Synchronized
         fun recordSuccess(time: Long) {
             totalCount++
             successCount++
@@ -63,6 +66,7 @@ class SkillExecutor(private val project: Project) {
             averageTime = totalTime / totalCount
         }
 
+        @Synchronized
         fun recordFailure(time: Long) {
             totalCount++
             failureCount++
@@ -116,26 +120,29 @@ class SkillExecutor(private val project: Project) {
             val orchestrator = ChatOrchestrator.getInstance(project)
 
             // 6. 执行（带超时）
-            val response = withTimeout(timeout) {
-                // TODO: 实际应该调用 orchestrator 的方法
-                // 这里简化为直接返回结果
-                "Skill executed: ${skill.name}"
+            val result = withTimeout(timeout) {
+                orchestrator.sendMessage(prompt)
             }
 
             val executionTime = System.currentTimeMillis() - startTime
 
             // 7. 记录成功
-            recordExecution(skill.id, true, executionTime)
+            recordExecution(skill.id, result.isSuccess, executionTime)
 
             // 8. 发布事件
-            EventBus.publish(SkillExecutedEvent(skill.id, true, executionTime))
+            EventBus.publish(SkillExecutedEvent(skill.id, result.isSuccess, executionTime))
+
+            val responseText = if (result.isSuccess) "Skill '${skill.name}' executed successfully"
+                               else result.exceptionOrNull()?.message ?: "Unknown error"
 
             SkillResult(
                 skillId = skill.id,
-                response = response,
+                response = responseText,
                 executionTime = executionTime,
-                success = true
+                success = result.isSuccess
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val executionTime = System.currentTimeMillis() - startTime
 
@@ -342,4 +349,15 @@ class SkillExecutor(private val project: Project) {
         val errors: List<String> = emptyList(),
         val warnings: List<String> = emptyList()
     )
+
+    override fun dispose() {
+        scope.cancel()
+        activeExecutions.clear()
+        log.info("SkillExecutor disposed")
+    }
+
+    companion object {
+        fun getInstance(project: Project): SkillExecutor =
+            project.getService(SkillExecutor::class.java)
+    }
 }

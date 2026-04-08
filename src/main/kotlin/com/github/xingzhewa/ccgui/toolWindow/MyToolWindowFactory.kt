@@ -1,6 +1,7 @@
 package com.github.xingzhewa.ccgui.toolWindow
 
 import com.github.xingzhewa.ccgui.browser.CefBrowserPanel
+import com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine
 import com.github.xingzhewa.ccgui.util.logger
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
@@ -31,6 +32,9 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val panel = JPanel()
             panel.add(browser.component)
 
+            // 注入 CefBrowserPanel 引用到 StreamingOutputEngine（用于 Java→JS 事件推送）
+            StreamingOutputEngine.getInstance(project).setCefPanel(cefPanel!!)
+
             // 添加到工具窗口
             val content = ContentFactory.getInstance().createContent(panel, "", false)
             toolWindow.contentManager.addContent(content)
@@ -55,7 +59,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
     private fun loadFrontendPage(project: Project, toolWindow: ToolWindow) {
         try {
             // 优先加载本地开发服务器
-            val devServerUrl = "http://localhost:5173"
+            val devServerUrl = "http://localhost:3000"
             val useDevServer = isDevServerAvailable(devServerUrl)
 
             if (useDevServer) {

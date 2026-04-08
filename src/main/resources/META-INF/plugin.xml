@@ -23,6 +23,57 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.config.CCGuiConfig"/>
 
+        <!-- SDK Services (Phase 2.5) -->
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.SdkSessionManager"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.SdkPermissionHandler"/>
+
+        <!-- Core Services (Phase 3) -->
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.orchestrator.ChatOrchestrator"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.session.SessionManager"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.config.ConfigManager"/>
+
+        <!-- Feature Services (Phase 4) -->
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.multimodal.MultimodalInputHandler"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.task.TaskProgressTracker"/>
+
+        <!-- Ecosystem Services (Phase 5) -->
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.skill.SkillsManager"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.skill.SkillExecutor"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.agent.AgentsManager"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.agent.AgentExecutor"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.mcp.McpServerManager"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.mcp.ScopeManager"/>
+
+        <!-- Infrastructure Services (PersistentStateComponent) -->
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.ConfigStorage"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.SecureStorage"/>
+        <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.SessionStorage"/>
+
+        <!-- Startup -->
         <postStartupActivity
             implementation="com.github.xingzhewa.ccgui.startup.MyProjectActivity"/>
     </extensions>

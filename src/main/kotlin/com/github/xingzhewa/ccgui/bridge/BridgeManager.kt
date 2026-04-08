@@ -41,12 +41,26 @@ class BridgeManager(private val project: Project) : Disposable {
 
     /**
      * 发送消息
+     * @param message 消息内容
+     * @param sessionId 会话ID
+     * @param callback StreamCallback（用于流式事件推送）
+     * @param onResponse 响应回调（用于发送 'response' 事件以 resolve/reject 前端 promise）
+     *                    第一个参数: result（成功时），第二个参数: error（失败时，可为 null）
      */
     fun sendMessage(
         message: String,
         sessionId: String,
-        callback: StreamCallback
+        callback: StreamCallback,
+        onResponse: ((result: Any?, error: String?) -> Unit)? = null
     ): Result<Unit> {
+        // CLI 可用性检查
+        if (!claudeClient.isCliAvailable()) {
+            val errorMsg = "Claude CLI is not installed or not available. Please install it from https://docs.anthropic.com/en/docs/claude-code/overview"
+            callback.onStreamError(errorMsg)
+            onResponse?.invoke(null, errorMsg)
+            return Result.failure(IllegalStateException(errorMsg))
+        }
+
         val options = sdkSessionManager.buildResumeOptions(sessionId)
 
         // 使用ensureActive来检查scope是否被取消
@@ -67,26 +81,38 @@ class BridgeManager(private val project: Project) : Disposable {
                     override fun onResult(message: SdkMessageTypes.SdkResultMessage) {
                         if (isActive) {
                             callback.onStreamComplete(emptyList())
+                            // 发送 'response' 事件以 resolve 前端 javaBridge.invoke() 的 promise
+                            val result = mapOf(
+                                "content" to "",
+                                "tokensUsed" to 0,
+                                "model" to "claude"
+                            )
+                            onResponse?.invoke(result, null)
                         }
                     }
 
                     override fun onError(error: String) {
                         if (isActive) {
                             callback.onStreamError(error)
+                            onResponse?.invoke(null, error)
                         }
                     }
                 })
 
                 // 检查结果并处理错误
                 if (!result.isSuccess && isActive) {
-                    callback.onStreamError(result.exceptionOrNull()?.message ?: "Unknown error")
+                    val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    callback.onStreamError(errMsg)
+                    onResponse?.invoke(null, errMsg)
                 }
             } catch (e: CancellationException) {
                 callback.onStreamCancelled()
                 throw e
             } catch (e: Exception) {
                 if (isActive) {
-                    callback.onStreamError(e.message ?: "Unknown error")
+                    val errMsg = e.message ?: "Unknown error"
+                    callback.onStreamError(errMsg)
+                    onResponse?.invoke(null, errMsg)
                 }
             } finally {
                 stateMutex.withLock {
@@ -104,8 +130,17 @@ class BridgeManager(private val project: Project) : Disposable {
     fun streamMessage(
         message: String,
         sessionId: String,
-        callback: StreamCallback
+        callback: StreamCallback,
+        onResponse: ((result: Any?, error: String?) -> Unit)? = null
     ) {
+        // CLI 可用性检查
+        if (!claudeClient.isCliAvailable()) {
+            val errorMsg = "Claude CLI is not installed or not available. Please install it from https://docs.anthropic.com/en/docs/claude-code/overview"
+            callback.onStreamError(errorMsg)
+            onResponse?.invoke(null, errorMsg)
+            return
+        }
+
         val options = sdkSessionManager.buildResumeOptions(sessionId)
         callback.onStreamStart()
 
@@ -125,26 +160,32 @@ class BridgeManager(private val project: Project) : Disposable {
                     override fun onResult(message: SdkMessageTypes.SdkResultMessage) {
                         if (isActive) {
                             callback.onStreamComplete(emptyList())
+                            onResponse?.invoke(null, null)
                         }
                     }
 
                     override fun onError(error: String) {
                         if (isActive) {
                             callback.onStreamError(error)
+                            onResponse?.invoke(null, error)
                         }
                     }
                 })
 
                 // 检查结果并处理错误
                 if (!result.isSuccess && isActive) {
-                    callback.onStreamError(result.exceptionOrNull()?.message ?: "Unknown error")
+                    val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    callback.onStreamError(errMsg)
+                    onResponse?.invoke(null, errMsg)
                 }
             } catch (e: CancellationException) {
                 callback.onStreamCancelled()
                 throw e
             } catch (e: Exception) {
                 if (isActive) {
-                    callback.onStreamError(e.message ?: "Unknown error")
+                    val errMsg = e.message ?: "Unknown error"
+                    callback.onStreamError(errMsg)
+                    onResponse?.invoke(null, errMsg)
                 }
             } finally {
                 stateMutex.withLock {

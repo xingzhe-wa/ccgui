@@ -52,7 +52,7 @@ data class ErrorContext(
  */
 class ErrorRecoveryManager {
 
-    private val logger = com.github.xingzhewa.ccgui.util.LoggerUtils.logger<ErrorRecoveryManager>()
+    private val logger = logger<ErrorRecoveryManager>()
 
     /**
      * 错误处理器

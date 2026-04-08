@@ -6,6 +6,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.transform
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Claude Code SDK stream-json 协议解析器
@@ -30,6 +32,20 @@ class StreamJsonParser {
      * @return 解析后的SdkMessage，空行或解析失败返回null
      */
     fun parseLine(line: String): SdkMessageTypes.SdkMessage? {
+        return parseLine(line, null)
+    }
+
+    /**
+     * 解析单行JSON为SDK消息（支持权限请求回调）
+     *
+     * @param line 从CLI stdout读取的一行文本
+     * @param permissionCallback 可选的权限请求回调，返回 true=允许, false=拒绝
+     * @return 解析后的SdkMessage，空行或解析失败返回null
+     */
+    fun parseLine(
+        line: String,
+        permissionCallback: ((toolName: String, input: Map<String, Any>) -> Boolean)?
+    ): SdkMessageTypes.SdkMessage? {
         val trimmed = line.trim()
         if (trimmed.isEmpty()) return null
 
@@ -42,7 +58,7 @@ class StreamJsonParser {
                 "user" -> parseUserMessage(json, trimmed)
                 "assistant" -> parseAssistantMessage(json, trimmed)
                 "result" -> parseResultMessage(json, trimmed)
-                "system" -> parseSystemMessage(json, trimmed)
+                "system" -> parseSystemMessage(json, trimmed, permissionCallback)
                 else -> {
                     logger.warn("Unknown SDK message type: $type")
                     SdkMessageTypes.SdkUnknownMessage(type, trimmed)
@@ -123,10 +139,21 @@ class StreamJsonParser {
      * system消息 — SDK内部系统通知
      * 如权限请求、警告等
      */
-    private fun parseSystemMessage(json: JsonObject, raw: String): SdkMessageTypes.SdkMessage {
+    private fun parseSystemMessage(
+        json: JsonObject,
+        raw: String,
+        permissionCallback: ((toolName: String, input: Map<String, Any>) -> Boolean)?
+    ): SdkMessageTypes.SdkMessage {
         val subtype = json.get("subtype")?.asString
-        if (subtype == "permission_request") {
-            logger.info("SDK permission request received")
+        if (subtype == "permission_request" && permissionCallback != null) {
+            val toolName = json.get("tool")?.asString ?: "unknown"
+            val inputMap = mutableMapOf<String, Any>()
+            json.getAsJsonObject("input")?.entrySet()?.forEach { (k, v) ->
+                inputMap[k] = v.toString()
+            }
+            logger.info("SDK permission request for tool: $toolName")
+            val allowed = permissionCallback(toolName, inputMap)
+            logger.info("Permission callback result: allowed=$allowed")
         }
         return SdkMessageTypes.SdkUnknownMessage("system", raw)
     }

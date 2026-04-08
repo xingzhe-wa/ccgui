@@ -40,7 +40,28 @@ export default {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
-        }
+        },
+        // 自定义颜色：消息气泡
+        userMessage: {
+          DEFAULT: 'hsl(var(--userMessage))',
+          foreground: 'hsl(var(--userMessageForeground))'
+        },
+        aiMessage: {
+          DEFAULT: 'hsl(var(--aiMessage))',
+          foreground: 'hsl(var(--aiMessageForeground))'
+        },
+        systemMessage: {
+          DEFAULT: 'hsl(var(--systemMessage))',
+          foreground: 'hsl(var(--systemMessageForeground))'
+        },
+        // 自定义颜色：代码块
+        codeBackground: 'hsl(var(--code-background))',
+        codeForeground: 'hsl(var(--code-foreground))',
+        // 自定义颜色：背景层级
+        'background-secondary': 'hsl(var(--background-secondary))',
+        'background-elevated': 'hsl(var(--background-elevated))',
+        // 自定义颜色：文字变体
+        'foreground-muted': 'hsl(var(--foreground-muted))'
       },
       borderRadius: {
         lg: 'var(--radius)',

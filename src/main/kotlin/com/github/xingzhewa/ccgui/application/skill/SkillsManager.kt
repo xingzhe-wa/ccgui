@@ -117,12 +117,61 @@ class SkillsManager(private val project: Project) : Disposable {
         log.info("Loaded ${builtinSkills.size} builtin skills")
     }
 
+    /** 内置 Skill IDs，用于区分用户自定义 Skills */
+    private val builtinSkillIds = mutableSetOf<String>()
+
     /**
      * 从存储加载 Skills
+     *
+     * 使用 IntelliJ PropertiesComponent 持久化用户自定义 Skills。
+     * 内置 Skills 始终作为默认存在，不会被存储覆盖。
      */
     private fun loadSkillsFromStorage() {
-        // TODO: 从持久化存储加载
         log.debug("Loading skills from storage...")
+        // 记录已加载的内置 Skill IDs
+        builtinSkillIds.addAll(skills.keys)
+        try {
+            val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
+                .getService(com.intellij.ide.util.PropertiesComponent::class.java)
+            val storedJson = properties.getValue("ccgui.custom.skills") ?: return
+
+            val array = JsonUtils.parseArray(storedJson) ?: return
+            var loadedCount = 0
+            array.forEach { element ->
+                try {
+                    val skill = Skill.fromJson(element.asJsonObject) ?: return@forEach
+                    // 只加载非内置（用户自定义）的 Skills，内置 Skills 已在 loadBuiltinSkills 中加载
+                    if (!skills.containsKey(skill.id)) {
+                        addSkill(skill)
+                        loadedCount++
+                    }
+                } catch (e: Exception) {
+                    log.warn("Failed to load skill from storage: ${e.message}")
+                }
+            }
+            log.info("Loaded $loadedCount custom skills from storage")
+        } catch (e: Exception) {
+            log.error("Failed to load skills from storage", e)
+        }
+    }
+
+    /**
+     * 持久化用户自定义 Skills 到存储
+     */
+    private fun persistCustomSkills() {
+        try {
+            val customSkills = skills.values.filter { it.id !in builtinSkillIds }
+            val jsonArray = com.google.gson.JsonArray()
+            customSkills.forEach { skill ->
+                jsonArray.add(skill.toJson())
+            }
+            val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
+                .getService(com.intellij.ide.util.PropertiesComponent::class.java)
+            properties.setValue("ccgui.custom.skills", jsonArray.toString())
+            log.debug("Persisted ${customSkills.size} custom skills")
+        } catch (e: Exception) {
+            log.error("Failed to persist custom skills", e)
+        }
     }
 
     // ==================== 核心 API ====================
@@ -148,6 +197,10 @@ class SkillsManager(private val project: Project) : Disposable {
         updateAllSkills()
 
         log.info("Skill added: ${skill.id} - ${skill.name}")
+
+        if (skill.id !in builtinSkillIds) {
+            persistCustomSkills()
+        }
 
         return true
     }
@@ -182,6 +235,8 @@ class SkillsManager(private val project: Project) : Disposable {
 
         log.info("Skill updated: ${skill.id}")
 
+        persistCustomSkills()
+
         return true
     }
 
@@ -201,6 +256,8 @@ class SkillsManager(private val project: Project) : Disposable {
         updateAllSkills()
 
         log.info("Skill deleted: $skillId")
+
+        persistCustomSkills()
 
         return true
     }

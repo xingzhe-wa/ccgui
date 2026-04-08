@@ -144,12 +144,61 @@ class AgentsManager(private val project: Project) : Disposable {
         log.info("Loaded ${builtinAgents.size} builtin agents")
     }
 
+    /** 内置 Agent IDs，用于区分用户自定义 Agents */
+    private val builtinAgentIds = mutableSetOf<String>()
+
     /**
      * 从存储加载 Agents
+     *
+     * 使用 IntelliJ PropertiesComponent 持久化用户自定义 Agents。
+     * 内置 Agents 始终作为默认存在，不会被存储覆盖。
      */
     private fun loadAgentsFromStorage() {
-        // TODO: 从持久化存储加载
         log.debug("Loading agents from storage...")
+        // 记录已加载的内置 Agent IDs
+        builtinAgentIds.addAll(agents.keys)
+        try {
+            val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
+                .getService(com.intellij.ide.util.PropertiesComponent::class.java)
+            val storedJson = properties.getValue("ccgui.custom.agents") ?: return
+
+            val array = JsonUtils.parseArray(storedJson) ?: return
+            var loadedCount = 0
+            array.forEach { element ->
+                try {
+                    val agent = Agent.fromJson(element.asJsonObject) ?: return@forEach
+                    // 只加载非内置（用户自定义）的 Agents，内置 Agents 已在 loadBuiltinAgents 中加载
+                    if (!agents.containsKey(agent.id)) {
+                        addAgent(agent)
+                        loadedCount++
+                    }
+                } catch (e: Exception) {
+                    log.warn("Failed to load agent from storage: ${e.message}")
+                }
+            }
+            log.info("Loaded $loadedCount custom agents from storage")
+        } catch (e: Exception) {
+            log.error("Failed to load agents from storage", e)
+        }
+    }
+
+    /**
+     * 持久化用户自定义 Agents 到存储
+     */
+    private fun persistCustomAgents() {
+        try {
+            val customAgents = agents.values.filter { it.id !in builtinAgentIds }
+            val jsonArray = com.google.gson.JsonArray()
+            customAgents.forEach { agent ->
+                jsonArray.add(agent.toJson())
+            }
+            val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
+                .getService(com.intellij.ide.util.PropertiesComponent::class.java)
+            properties.setValue("ccgui.custom.agents", jsonArray.toString())
+            log.debug("Persisted ${customAgents.size} custom agents")
+        } catch (e: Exception) {
+            log.error("Failed to persist custom agents", e)
+        }
     }
 
     // ==================== 核心 API ====================
@@ -177,6 +226,10 @@ class AgentsManager(private val project: Project) : Disposable {
         updateAllAgents()
 
         log.info("Agent added: ${agent.id} - ${agent.name}")
+
+        if (agent.id !in builtinAgentIds) {
+            persistCustomAgents()
+        }
 
         return true
     }
@@ -222,6 +275,8 @@ class AgentsManager(private val project: Project) : Disposable {
 
         log.info("Agent updated: ${agent.id}")
 
+        persistCustomAgents()
+
         return true
     }
 
@@ -243,6 +298,8 @@ class AgentsManager(private val project: Project) : Disposable {
         updateAllAgents()
 
         log.info("Agent deleted: $agentId")
+
+        persistCustomAgents()
 
         return true
     }

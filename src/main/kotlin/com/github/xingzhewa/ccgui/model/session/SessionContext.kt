@@ -1,5 +1,6 @@
 package com.github.xingzhewa.ccgui.model.session
 
+import com.github.xingzhewa.ccgui.model.config.ModelConfig
 import com.google.gson.JsonObject
 
 /**
@@ -55,51 +56,11 @@ data class SessionContext(
             add("enabledMcpServers", com.google.gson.JsonArray().apply {
                 enabledMcpServers.forEach { add(it) }
             })
-            add("metadata", com.google.gson.JsonArray().apply {
+            add("metadata", JsonObject().apply {
                 metadata.forEach { (key, value) ->
-                    add(com.google.gson.JsonPrimitive(value.toString()))
+                    addProperty(key, value.toString())
                 }
             })
-        }
-    }
-}
-
-/**
- * 模型配置
- */
-data class ModelConfig(
-    val provider: String = "anthropic",
-    val model: String = "claude-sonnet-4-20250514",
-    val maxTokens: Int = 8192,
-    val temperature: Double = 1.0,
-    val topP: Double = 0.9
-) {
-
-    companion object {
-        /**
-         * 从 JSON 反序列化
-         */
-        fun fromJson(json: JsonObject): ModelConfig {
-            return ModelConfig(
-                provider = json.get("provider")?.asString ?: "anthropic",
-                model = json.get("model")?.asString ?: "claude-sonnet-4-20250514",
-                maxTokens = json.get("maxTokens")?.asInt ?: 8192,
-                temperature = json.get("temperature")?.asDouble ?: 1.0,
-                topP = json.get("topP")?.asDouble ?: 0.9
-            )
-        }
-    }
-
-    /**
-     * 序列化为 JSON
-     */
-    fun toJson(): JsonObject {
-        return JsonObject().apply {
-            addProperty("provider", provider)
-            addProperty("model", model)
-            addProperty("maxTokens", maxTokens)
-            addProperty("temperature", temperature)
-            addProperty("topP", topP)
         }
     }
 }

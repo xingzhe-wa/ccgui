@@ -16,11 +16,14 @@ import com.github.xingzhewa.ccgui.model.message.MessageRole
 import com.github.xingzhewa.ccgui.model.session.ChatSession
 import com.github.xingzhewa.ccgui.model.task.TaskProgress
 import com.github.xingzhewa.ccgui.util.logger
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -38,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @param project IntelliJ项目实例
  */
 @Service(Service.Level.PROJECT)
-class AgentExecutor(private val project: Project) {
+class AgentExecutor(private val project: Project) : Disposable {
 
     private val log = logger<AgentExecutor>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -60,6 +63,7 @@ class AgentExecutor(private val project: Project) {
         var totalExecutedActions: Int = 0,
         var averageTime: Long = 0
     ) {
+        @Synchronized
         fun recordCompletion(time: Long, executedActions: Int) {
             totalTasks++
             completedTasks++
@@ -67,6 +71,7 @@ class AgentExecutor(private val project: Project) {
             averageTime = (averageTime * (totalTasks - 1) + time) / totalTasks
         }
 
+        @Synchronized
         fun recordFailure(time: Long) {
             totalTasks++
             failedTasks++
@@ -154,6 +159,8 @@ class AgentExecutor(private val project: Project) {
             recordExecution(agent.id, result, executionTime)
 
             result
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val executionTime = System.currentTimeMillis() - startTime
 
@@ -245,7 +252,13 @@ class AgentExecutor(private val project: Project) {
         )
 
         // TODO: 调用 ChatOrchestrator 获取建议
-        val suggestion = "Suggestion for: ${task.description}"
+        val orchestrator = ChatOrchestrator.getInstance(project)
+        val result = orchestrator.sendMessage(prompt)
+        val suggestion = if (result.isSuccess) {
+            "Agent '${agent.name}' analyzed: ${task.description}"
+        } else {
+            "Error: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+        }
 
         return AgentResult(
             agentId = agent.id,
@@ -400,5 +413,16 @@ class AgentExecutor(private val project: Project) {
 
         log.info("Stopped $count agent executions for: $agentId")
         return count
+    }
+
+    override fun dispose() {
+        scope.cancel()
+        activeExecutions.clear()
+        log.info("AgentExecutor disposed")
+    }
+
+    companion object {
+        fun getInstance(project: Project): AgentExecutor =
+            project.getService(AgentExecutor::class.java)
     }
 }

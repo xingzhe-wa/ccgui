@@ -216,13 +216,7 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
     }
 
     companion object {
-        @Volatile
-        private var instance: SessionStorage? = null
-
-        fun getInstance(project: Project): SessionStorage {
-            return instance ?: synchronized(this) {
-                instance ?: project.getService(SessionStorage::class.java).also { instance = it }
-            }
-        }
+        fun getInstance(project: Project): SessionStorage =
+            project.getService(SessionStorage::class.java)
     }
 }

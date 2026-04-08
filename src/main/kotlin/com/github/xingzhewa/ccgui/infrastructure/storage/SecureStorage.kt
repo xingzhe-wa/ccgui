@@ -45,17 +45,10 @@ class SecureStorage(private val project: Project) : PersistentStateComponent<Sec
     }
 
     companion object {
-        private const val SERVICE_NAME = "ClaudeCodeJet"
         private const val API_KEY_PREFIX = "api_key_"
 
-        @Volatile
-        private var instance: SecureStorage? = null
-
-        fun getInstance(project: Project): SecureStorage {
-            return instance ?: synchronized(this) {
-                instance ?: project.getService(SecureStorage::class.java).also { instance = it }
-            }
-        }
+        fun getInstance(project: Project): SecureStorage =
+            project.getService(SecureStorage::class.java)
     }
 
     /**

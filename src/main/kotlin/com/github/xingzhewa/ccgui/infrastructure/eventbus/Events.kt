@@ -27,6 +27,8 @@ data class SdkSessionInitEvent(
  * CLI 请求用户确认权限时触发
  */
 data class PermissionRequestEvent(
+    val project: com.intellij.openapi.project.Project,
+    val requestId: String,
     val toolName: String,
     val description: String,
     val question: InteractiveQuestion

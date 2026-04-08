@@ -166,12 +166,50 @@ intellijPlatformTesting {
 }
 
 // ============================================
-// CCGUI 自定义任务
+// CCGUI 前端构建任务
 // ============================================
-//
-// 注意：buildWebview 和 buildAiBridge 任务将在后续阶段实现
-// 当前阶段专注于 Kotlin 核心代码的编译和测试
-//
-// TODO: 实现 buildWebview 任务（React 前端构建）
-// TODO: 实现 buildAiBridge 任务（Node.js Bridge 构建）
-// TODO: 实现 buildDist 任务（合并所有资源）
+
+/**
+ * 构建前端 webview（React + TypeScript + Vite）
+ * 当 webview/src 有变更时重新构建，无变更时跳过
+ */
+val buildWebview by tasks.registering(Exec::class) {
+    description = "Build frontend webview assets with Vite"
+    workingDir = file("webview")
+
+    // Windows 兼容：使用 cmd /c 执行 npm
+    if (System.getProperty("os.name").lowercase().contains("windows")) {
+        commandLine("cmd", "/c", "npm.cmd", "run", "build")
+    } else {
+        commandLine("sh", "-c", "npm run build")
+    }
+
+    // 增量构建：仅当源码变更时才重新构建
+    inputs.dir(file("webview/src"))
+    inputs.file(file("webview/package.json"))
+    inputs.file(file("webview/vite.config.ts"))
+    inputs.file(file("webview/tsconfig.json"))
+    inputs.file(file("webview/package-lock.json"))
+    outputs.dir(file("webview/dist"))
+}
+
+/**
+ * 将前端构建产物复制到 resources 目录
+ * 使其在插件 JAR 中可用（classpath 加载）
+ */
+val copyWebview by tasks.registering(Copy::class) {
+    description = "Copy webview build output to resources for classpath loading"
+    dependsOn(buildWebview)
+
+    from(file("webview/dist"))
+    into(file("src/main/resources/webview/dist"))
+
+    // 增量：仅当 dist 内容变更时复制
+    inputs.dir(file("webview/dist"))
+    outputs.dir(file("src/main/resources/webview/dist"))
+}
+
+// 让资源处理阶段自动依赖前端构建
+tasks.named("processResources") {
+    dependsOn(copyWebview)
+}

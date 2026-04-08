@@ -169,13 +169,7 @@ class ConfigStorage(private val project: Project) : PersistentStateComponent<Con
     }
 
     companion object {
-        @Volatile
-        private var instance: ConfigStorage? = null
-
-        fun getInstance(project: Project): ConfigStorage {
-            return instance ?: synchronized(this) {
-                instance ?: project.getService(ConfigStorage::class.java).also { instance = it }
-            }
-        }
+        fun getInstance(project: Project): ConfigStorage =
+            project.getService(ConfigStorage::class.java)
     }
 }
