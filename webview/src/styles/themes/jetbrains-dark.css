@@ -1,0 +1,54 @@
+/**
+ * JetBrains Dark Theme
+ * IDE风格深色主题，适配IntelliJ IDEA
+ */
+
+:root {
+  --theme-name: 'JetBrains Dark';
+
+  /* 主色调 */
+  --color-primary: 217 91% 60%;
+  --color-primary-hover: 217 91% 70%;
+  --color-primary-foreground: 0 0% 100%;
+
+  /* 背景色 */
+  --color-background: 225 25% 11%;
+  --color-background-secondary: 225 20% 15%;
+  --color-background-elevated: 225 18% 18%;
+
+  /* 前景色 */
+  --color-foreground: 220 14% 71%;
+  --color-foreground-muted: 220 10% 50%;
+
+  /* 消息气泡 */
+  --color-user-message: 217 91% 60%;
+  --color-user-message-foreground: 0 0% 100%;
+  --color-ai-message: 225 20% 22%;
+  --color-ai-message-foreground: 220 14% 71%;
+
+  /* 系统消息 */
+  --color-system-message: 45 100% 50%;
+  --color-system-message-foreground: 225 25% 11%;
+
+  /* 边框 */
+  --color-border: 225 18% 25%;
+  --color-border-focus: 217 91% 60%;
+
+  /* 代码 */
+  --color-code-background: 225 25% 9%;
+  --color-code-foreground: 220 14% 71%;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.6);
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* 字体 */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}

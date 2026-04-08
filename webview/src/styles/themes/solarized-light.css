@@ -1,0 +1,54 @@
+/**
+ * Solarized Light Theme
+ * Solarized风格浅色主题
+ */
+
+:root {
+  --theme-name: 'Solarized Light';
+
+  /* 主色调 */
+  --color-primary: 211 100% 50%;
+  --color-primary-hover: 211 100% 60%;
+  --color-primary-foreground: 0 0% 100%;
+
+  /* 背景色 */
+  --color-background: 50 25% 94%;
+  --color-background-secondary: 50 20% 88%;
+  --color-background-elevated: 50 25% 98%;
+
+  /* 前景色 */
+  --color-foreground: 50 10% 30%;
+  --color-foreground-muted: 50 10% 50%;
+
+  /* 消息气泡 */
+  --color-user-message: 211 100% 50%;
+  --color-user-message-foreground: 0 0% 100%;
+  --color-ai-message: 50 25% 88%;
+  --color-ai-message-foreground: 50 10% 30%;
+
+  /* 系统消息 */
+  --color-system-message: 30 100% 50%;
+  --color-system-message-foreground: 50 25% 94%;
+
+  /* 边框 */
+  --color-border: 50 10% 85%;
+  --color-border-focus: 211 100% 50%;
+
+  /* 代码 */
+  --color-code-background: 50 20% 92%;
+  --color-code-foreground: 50 10% 30%;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.15);
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* 字体 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Fira Code', Consolas, monospace;
+}
