@@ -44,7 +44,7 @@ export interface UseFileDropReturn {
 export const useFileDrop = (options: UseFileDropOptions = {}): UseFileDropReturn => {
   const { onDrop, onDragEnter, onDragLeave, accept, multiple = true } = options;
   const [isDragging, setIsDragging] = useState(false);
-  const [dragCounter, setDragCounter] = useState(0);
+  const [, setDragCounter] = useState(0);
 
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
@@ -110,7 +110,10 @@ export const useFileDrop = (options: UseFileDropOptions = {}): UseFileDropReturn
       }
 
       if (!multiple && filteredFiles.length > 0) {
-        filteredFiles = [filteredFiles[0]];
+        const firstFile = filteredFiles[0];
+        if (firstFile) {
+          filteredFiles = [firstFile];
+        }
       }
 
       if (filteredFiles.length > 0) {

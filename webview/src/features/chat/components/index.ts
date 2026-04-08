@@ -33,3 +33,10 @@ export type { SendButtonProps } from './SendButton';
 
 export { InputToolbar } from './InputToolbar';
 export type { InputToolbarProps } from './InputToolbar';
+
+// Attachment & Quick Actions
+export { AttachmentManager } from './AttachmentManager';
+export type { AttachmentManagerProps, AttachmentFile } from './AttachmentManager';
+
+export { QuickActionsPanel } from './QuickActionsPanel';
+export type { QuickActionsPanelProps, QuickAction } from './QuickActionsPanel';

@@ -27,7 +27,7 @@ export interface MultipleChoiceOptionsProps {
  * 渲染多选列表，使用原生checkbox input实现无障碍支持。
  */
 export const MultipleChoiceOptions = memo<MultipleChoiceOptionsProps>(function MultipleChoiceOptions({
-  questionId,
+  questionId: _questionId,
   options,
   selected,
   onChange,

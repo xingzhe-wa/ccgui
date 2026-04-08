@@ -6,7 +6,7 @@
  * 用户提交后通过submitAnswer()回传给后端。
  */
 
-import { memo, useState, useEffect, useCallback } from 'react';
+import { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { QuestionType } from '@/shared/types/interaction';
 import { Button } from '@/shared/components/ui/button';
 import { SingleChoiceOptions } from './SingleChoiceOptions';
@@ -55,7 +55,7 @@ export const InteractiveQuestionPanel = memo<InteractiveQuestionPanelProps>(func
   question,
   questionType,
   options = [],
-  allowMultiple = false,
+  allowMultiple: _allowMultiple = false,
   required = true,
   placeholder,
   timeout,
@@ -67,6 +67,10 @@ export const InteractiveQuestionPanel = memo<InteractiveQuestionPanelProps>(func
   const [textInput, setTextInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 使用 ref 存储 onSkip 回调，避免超时处理被不必要地重置
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
+
   // 超时处理
   useEffect(() => {
     if (!timeout || timeout <= 0) return;
@@ -74,11 +78,11 @@ export const InteractiveQuestionPanel = memo<InteractiveQuestionPanelProps>(func
     const timer = setTimeout(() => {
       setIsSubmitting(false);
       // 超时时触发跳过逻辑
-      onSkip?.();
+      onSkipRef.current?.();
     }, timeout * 1000);
 
     return () => clearTimeout(timer);
-  }, [timeout, onSkip]);
+  }, [timeout]);
 
   const handleSubmit = useCallback(async () => {
     if (required && !selectedAnswer && !textInput) return;
@@ -187,14 +191,22 @@ const CountdownTimer = ({ seconds }: { seconds: number }) => {
   const [remaining, setRemaining] = useState(seconds);
 
   useEffect(() => {
-    if (remaining <= 0) return;
+    // 使用 seconds 作为依赖，当组件重新挂载时会重置
+    // 不依赖 remaining 避免每秒重建 interval
+    if (seconds <= 0) return;
 
     const interval = setInterval(() => {
-      setRemaining((prev) => prev - 1);
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [remaining]);
+  }, [seconds]);
 
   const minutes = Math.floor(remaining / 60);
   const secs = remaining % 60;

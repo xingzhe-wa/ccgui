@@ -5,7 +5,6 @@
  */
 
 import { create } from 'zustand';
-import type { ID } from '@/shared/types';
 import type { InteractiveQuestion, QuestionAnswer } from '@/shared/types/interaction';
 
 interface QuestionState {
