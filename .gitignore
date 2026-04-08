@@ -5,3 +5,4 @@
 .kotlin
 .qodana
 build
+/webview/node_modules

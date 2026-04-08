@@ -22,12 +22,77 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          state: ['zustand']
+        manualChunks: (id) => {
+          // React 相关
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor-react';
+          }
+          // React Router
+          if (id.includes('node_modules/react-router')) {
+            return 'vendor-router';
+          }
+          // Zustand 状态管理
+          if (id.includes('node_modules/zustand')) {
+            return 'vendor-state';
+          }
+          // Markdown 相关
+          if (id.includes('node_modules/react-markdown') ||
+              id.includes('node_modules/remark') ||
+              id.includes('node_modules/rehype') ||
+              id.includes('node_modules/katex')) {
+            return 'vendor-markdown';
+          }
+          // 代码高亮
+          if (id.includes('node_modules/highlight.js')) {
+            return 'vendor-highlight';
+          }
+          // 虚拟滚动
+          if (id.includes('node_modules/@tanstack/react-virtual')) {
+            return 'vendor-virtual';
+          }
+          // DnD Kit
+          if (id.includes('node_modules/@dnd-kit')) {
+            return 'vendor-dnd';
+          }
+          // Lucide 图标
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+          // 其他 vendor (排除已处理的)
+          if (id.includes('node_modules') &&
+              !id.includes('node_modules/react') &&
+              !id.includes('node_modules/react-dom') &&
+              !id.includes('node_modules/react-router') &&
+              !id.includes('node_modules/zustand') &&
+              !id.includes('node_modules/react-markdown') &&
+              !id.includes('node_modules/remark') &&
+              !id.includes('node_modules/rehype') &&
+              !id.includes('node_modules/katex') &&
+              !id.includes('node_modules/highlight.js') &&
+              !id.includes('node_modules/@tanstack/react-virtual') &&
+              !id.includes('node_modules/@dnd-kit') &&
+              !id.includes('node_modules/lucide-react')) {
+            return 'vendor';
+          }
+          // 应用代码
+          return undefined;
         }
       }
-    }
+    },
+    // 启用压缩
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // 生产环境移除console.log
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn']
+      }
+    },
+    // Chunk 大小警告阈值 (KB)
+    chunkSizeWarningLimit: 500
+  },
+  // 优化依赖预构建
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'zustand', 'react-markdown']
   }
 });

@@ -30,6 +30,7 @@ interface AppState {
   createSession: (name: string, type: SessionType) => Promise<ChatSession | null>;
   deleteSession: (sessionId: string) => void;
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void;
+  reorderSessions: (sessions: ChatSession[]) => void;
 
   // UI操作
   toggleSidebar: () => void;
@@ -103,6 +104,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         s.id === sessionId ? { ...s, ...updates } : s
       )
     }));
+  },
+
+  reorderSessions: (sessions) => {
+    set({ sessions });
   },
 
   // ========== UI操作 ==========
