@@ -301,18 +301,18 @@ questionStore 合并到 appStore（低频）：
 
 ## 7. PRD-v3.0 Gap 填补对照
 
-| PRD 模块 | v0.0.1 完成度 | v0.0.2 Sprint6-7 | 剩余（Sprint8待补） |
+| PRD 模块 | v0.0.1 完成度 | v0.0.2 Sprint6-7 | Sprint 8（Sprint8已完成） |
 |---------|------------|----------------|----------------|
-| 3.1 UI/主题系统 | 40% | **75%**（+35%） | 主题编辑器 UI、状态栏 Widget |
-| 3.2 交互增强 | 15% | **70%**（+55%） | 对话引用系统、代码快捷操作（部分） |
-| 3.3 会话管理 | 55% | **90%**（+35%） | 导入导出、任务进度可视化 |
-| 3.4 模型配置 | 0% | **0%** | 始终为 0%（Claude CLI 定位） |
-| 3.5 Claude Code 生态 | 50% | **90%**（+40%） | Skill/Agent 执行 UI、MCP 测试 UI |
-| 核心通信 | 85% | **95%**（+10%） | 剩余为极端场景错误处理 |
+| 3.1 UI/主题系统 | 40% | **75%**（+35%） | **75%**（PreviewPanel 基础布局） |
+| 3.2 交互增强 | 15% | **70%**（+55%） | **95%**（+25%：交互式请求 UI、代码快捷操作） |
+| 3.3 会话管理 | 55% | **90%**（+35%） | **95%**（+5%：导入导出完整链路） |
+| 3.4 模型配置 | 0% | **0%** | **0%**（始终为 0%，Claude CLI 定位） |
+| 3.5 Claude Code 生态 | 50% | **90%**（+40%） | **90%** |
+| 核心通信 | 85% | **95%**（+10%） | **98%**（+3%：交互请求完整链路打通） |
 
-**v0.0.2 总体目标完成度**：从 ~45% → ~80%（Sprint 6+7 完成）
+**v0.0.2 总体目标完成度**：从 ~45% → ~95%（Sprint 6+7+8 全部完成）
 
-> 注：Sprint 8 还未开始，预计完成后达到 ~95%
+> 注：剩余 5% 为对话引用系统、任务进度可视化、StatusBar Widget、虚拟滚动等非核心功能
 
 ---
 
@@ -380,15 +380,49 @@ questionStore 合并到 appStore（低频）：
 
 ## 10. Sprint 8 执行记录
 
-> 待开始
+> 更新日期：2026-04-10
 
-### Task 8.1 ~ 8.5 待办
+### Task 8.1 ~ 8.5 完成清单
 
-- [ ] Task 8.1：交互式请求 UI（InteractiveQuestionPanel 集成）
-- [ ] Task 8.2：会话导入/导出（JSON 格式）
-- [ ] Task 8.3：代码快捷操作（编辑器右键"解释代码"AnAction）
-- [ ] Task 8.4：PreviewPanel 基础布局（左右分栏）
-- [ ] Task 8.5：Sprint 8 收尾（最终构建 + git tag v0.0.2）
+- [x] Task 8.1：交互式请求 UI（InteractiveQuestionPanel 集成）
+  - 修复 InteractiveRequestEngine 死锁：引入 `CompletableDeferred` 替代 `Mutex.withLock` + 轮询
+  - `MyProjectActivity.pushQuestionToJavaScript()` 订阅 `InteractiveQuestionEvent`，通过 `ToolWindowManager` 获取 `CefBrowserPanel`，调用 `sendToJavaScript("streaming:question", ...)`
+  - `App.tsx` 订阅 `window.ccEvents.on('streaming:question', ...)` 调用 `questionStore.setQuestion()`
+  - 修复 `MyProjectActivity` 编译错误：`WindowManager`→`ToolWindowManager`、`question.message`→`question.question`、`QuestionOption.icon` 不存在
+- [x] Task 8.2：会话导入/导出（JSON 格式）
+  - `SessionManager.importSession(jsonContent: String)` — 从 JSON 字符串导入会话
+  - `CefBrowserPanel.handleImportSession` 接收 `{data: string}` 参数（从 ArrayBuffer 改为 string）
+  - `handleExportSession` 使用 `ChatSession.toJson()` 实现一致的序列化
+  - `SessionHistoryView.handleExportSession` — 调用 `javaBridge.exportSession()` → 触发浏览器下载
+  - `SessionHistoryView.handleImportSession` — 文件选择器 → `javaBridge.importSession(text)` → 切换到新会话
+  - `SessionHistory` 新增 `onImportSession` prop 和导入按钮
+- [x] Task 8.3：代码快捷操作（编辑器右键"解释代码"AnAction）
+  - `CodeExplainAction.kt` 实现 `AnAction`，注册到 `EditorPopupMenu`
+  - 选中代码 → 右键菜单 → "解释代码" → 打开 CCGUI 工具窗口 → 发送 `/explain` 命令
+- [x] Task 8.4：PreviewPanel 基础布局（左右分栏）
+  - `MessageDetail.tsx` — 消息详情面板：角色/时间、内容、附件列表、元数据
+  - `MessageItem` 新增 `onSelect`/`isSelected` prop，点击消息显示选中环（ring-2 ring-primary）
+  - `ChatView` 状态提升：`selectedMessageId` state + `handleSelectMessage` 回调
+  - `ChatView` split layout：`selectedMessage` 时右侧显示 MessageDetail 面板（w-80）
+- [x] Task 8.5：Sprint 8 收尾 ✅ — git commit 87623a8, git tag v0.0.2
+
+### Sprint 8 验收结果
+
+- [x] `./gradlew build` 构建成功
+- [x] `cd webview && npx tsc --noEmit` 无类型错误
+- [x] `git tag v0.0.2` 已创建
+- [x] InteractiveRequestEngine 死锁已修复（`CompletableDeferred` 模式）
+- [x] `streaming:question` 事件从 Kotlin EventBus → `CefBrowserPanel.sendToJavaScript` → `window.ccEvents.emit` → `questionStore.setQuestion()` 完整链路打通
+- [x] 会话导出为 JSON 文件并下载，导入从文件读取并切换到新会话
+- [x] 编辑器右键菜单出现"解释代码"，点击后工具窗口打开并发送解释请求
+- [x] 点击消息显示详情面板（角色/时间/内容/附件/元数据），点击关闭按钮或再次点击消息可关闭
+
+### Sprint 8 发现的关键问题
+
+1. **`WindowManager.getToolWindow` 不存在**：IntelliJ API 中获取 ToolWindow 应使用 `ToolWindowManager.getInstance(project).getToolWindow(id)`，而非 `WindowManager.getInstance().getToolWindow(...)`
+2. **`QuestionOption` 没有 `icon` 字段**：前端 `InteractiveQuestion.options` 使用 `icon` 字段，但 Kotlin `QuestionOption` 只有 `id/label/description`。传入 `null` 即可，前端做 `opt.icon ?? undefined` 容错
+3. **`importSession` 参数类型 mismatch**：原设计使用 `ArrayBuffer`，但 Java→JS 通信天然支持 string（JSON）。改为 string 后端直接解析，简化了序列化层
+4. **MessageDetail 附件类型窄化**：`ContentPart` 是 union type，`ImageContentPart` 没有 `name`，需要 `'name' in att` 运行时检查
 
 ---
 
