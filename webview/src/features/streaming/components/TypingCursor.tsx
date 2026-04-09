@@ -27,7 +27,7 @@ export const TypingCursor = memo<TypingCursorProps>(function TypingCursor({
   return (
     <span
       className={cn(
-        'ml-1 inline-block h-4 w-0.5 animate-pulse',
+        'ml-1 inline-block h-4 w-0.5 animate-typewriter',
         className
       )}
       style={{

@@ -1,56 +1,82 @@
-# v0.0.1 发版协作 Prompts
+# ClaudeCodeJet Sprint Prompts 索引
 
-## 使用方式
+> Sprint Prompt 文档索引。每次 Sprint 开发前，开发者应完整阅读对应的 prompt 文件。
 
-每个 Sprint prompt 是一个**自包含的任务包**，包含：
-- 项目背景（不需要额外上下文）
-- 具体任务清单（精确到文件级别）
-- 验收标准（明确的完成定义）
-- 交接话术（标准化交接）
+---
 
-### 协作流程
+## v0.0.2 开发 Sprint
 
-```
-开发者 A 拿到 sprint-1 prompt
-  → 执行任务 → 勾选验收标准 → 记录执行记录 → 交接
+| Sprint | 文件 | 核心目标 | 预计周期 |
+|--------|------|---------|---------|
+| Sprint 6 | `sprint-6-core-experience.md` | 核心体验修复：Markdown高亮、会话切换联动、StopButton、新建会话UI | Day 1-2 |
+| Sprint 7 | `sprint-7-high-frequency-features.md` | 高频功能补全：Skill/Agent列表、历史搜索、多模态输入、打字机光标 | Day 3-4 |
+| Sprint 8 | `sprint-8-interaction-enhancement.md` | 交互增强：交互式请求UI、断点协同与会话恢复、导入导出、代码快捷操作 | Day 5-6 |
 
-开发者 B 拿到 sprint-2 prompt + A 的执行记录
-  → 执行任务 → 勾选验收标准 → 记录执行记录 → 交接
+---
 
-...依次类推直到 sprint-5 完成
-```
+## v0.0.1 开发 Sprint
 
-### 如何使用 Prompt
+| Sprint | 文件 | 核心目标 | 状态 |
+|--------|------|---------|------|
+| Sprint 1 | `sprint-1-build-pipeline.md` | 构建流水线打通，前端打包进插件 | ✅ 完成 |
+| Sprint 2 | `sprint-2-css-theme.md` | CSS主题系统，HSL变量架构 | ✅ 完成 |
+| Sprint 3 | `sprint-3-e2e-integration.md` | 端到端联调，Bridge通信链路打通 | ✅ 完成 |
+| Sprint 4 | `sprint-4-stability.md` | Bug修复，错误处理，基础稳定性 | ✅ 完成 |
+| Sprint 5 | `sprint-5-release.md` | Bridge缺口补全，权限流打通，死代码清理 | ✅ 完成 |
 
-1. 将对应 Sprint 的 prompt 全文复制给 AI（Claude / Cursor / Copilot Chat）
-2. AI 会读取指定的文件并执行任务
-3. 每个 prompt 包含 "需要读取的文件" 列表，AI 会自行读取
-4. 完成后勾选 "验收标准"，在末尾记录实际执行情况
-
-## Prompt 文件列表
-
-| 文件 | Sprint | 预计耗时 | 核心目标 |
-|------|--------|---------|---------|
-| `sprint-1-build-pipeline.md` | Sprint 1 | 1 天 | 打通构建，`buildPlugin` 产出可用 .zip |
-| `sprint-2-css-theme.md` | Sprint 2 | 1 天 | 修复 CSS 变量，主题切换生效 |
-| `sprint-3-e2e-integration.md` | Sprint 3 | 2 天 | 端到端联调，消息收发链路跑通 |
-| `sprint-4-stability.md` | Sprint 4 | 1 天 | 修 Bug + 错误兜底 + 稳定运行 |
-| `sprint-5-release.md` | Sprint 5 | 0.5 天 | 最终打包 + 安装验证 + Git tag |
+---
 
 ## 关联文档
 
 | 文件 | 说明 |
 |------|------|
-| `design/docs/release-v0.0.1-plan.md` | 完整发版执行方案 |
-| `design/docs/backend/00-overview.md` | 后端架构总览 |
-| `design/docs/front/00-overview.md` | 前端架构总览 |
-| `design/docs/front/10-architecture.md` | 前端组件层级设计 |
-| `design/docs/front/20-dev-guide.md` | 前端开发进度评估 |
+| `design/release-v0.0.2-plan.md` | v0.0.2 完整发版执行方案 |
+| `design/release-v0.0.1-plan.md` | v0.0.1 完整发版执行方案 |
+| `design/PRD-v3.0.md` | 完整产品需求文档 |
+| `design/methodology.md` | 开发方法论与经验沉淀 |
 
-## 注意事项
+---
 
-1. **顺序严格**：Sprint 1-5 必须按顺序执行，每个 Sprint 依赖上一个的产出
-2. **验收标准不可跳过**：每个 checkbox 必须勾选后才能交接
-3. **执行记录必填**：在 prompt 末尾记录实际发现的问题和修复方案，这是下一位开发者的关键上下文
-4. **Sprint 3 是关键路径**：端到端联调最容易出问题，预留充足时间
-5. **Windows 兼容性**：所有开发者注意 Windows 环境下的路径和进程管理问题
+## 如何使用本文档
+
+1. 在开始 Sprint N 之前，完整阅读 `sprint-N-*.md`
+2. 按文件中的 Task 顺序执行，每个 Task 完成时确认验收标准
+3. 遇到问题，参考"需要读取的文件"章节排查
+4. Sprint 结束后，在文件末尾更新"交接给下一位开发者"章节
+5. 将所有变更 commit，并 tag 对应版本
+
+---
+
+## 通用调试技巧
+
+### 后端（Kotlin）
+
+| 调试目标 | 命令/技巧 |
+|---------|---------|
+| 查看 IDEA 日志 | `{user.home}/AppData/Local/JetBrains/IntelliJIdea{版本}/log/idea.log` |
+| 打印调试 | `println("=== DEBUG: $variable ===")` — 输出到 IDEA console |
+| Gradle 重新构建 | `./gradlew clean build --rerun-tasks` |
+| 运行插件 | `./gradlew runIde` |
+| 插件打包 | `./gradlew buildPlugin` |
+
+### 前端（React/TypeScript）
+
+| 调试目标 | 命令/技巧 |
+|---------|---------|
+| 打开 CEF DevTools | IDEA → `Help` → `Find Action` → 搜索 "Open CEF DevTools" |
+| 前端独立开发 | `cd webview && npm run dev`（需 mock bridge） |
+| TypeScript 类型检查 | `cd webview && npx tsc --noEmit` |
+| 热更新 | Vite 默认支持，保存即更新 |
+
+### 跨语言通信调试
+
+| 调试目标 | 命令/技巧 |
+|---------|---------|
+| JS→Java 通道 | 在 `CefBrowserPanel.handleJsRequest()` 第一行加 `println` |
+| Java→JS 通道 | 在 `sendToJavaScript()` 第一行加 `println` |
+| CLI 独立测试 | 终端运行 `claude -p "hello" --output-format stream-json` |
+| 确认 window.ccBackend 存在 | CEF DevTools Console: `window.ccBackend ? "OK" : "MISSING"` |
+
+---
+
+*本文档随 Sprint 迭代更新。*

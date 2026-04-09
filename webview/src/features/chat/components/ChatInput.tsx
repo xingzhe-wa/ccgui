@@ -2,13 +2,15 @@
  * ChatInput - 聊天输入框组件
  */
 
-import { memo, useState, useCallback, useRef } from 'react';
+import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 import { AttachmentDropZone } from './AttachmentDropZone';
 import { ImagePreview } from './ImagePreview';
 import { SendButton } from './SendButton';
 import { InputToolbar } from './InputToolbar';
+import { useSessionStore } from '@/shared/stores/sessionStore';
+import { javaBridge } from '@/lib/java-bridge';
 import type { ContentPart } from '@/shared/types';
 
 /**
@@ -49,6 +51,15 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentSessionId = useSessionStore((s) => s.currentSessionId);
+
+  // 自动聚焦到输入框：会话切换后（会话有效时）
+  useEffect(() => {
+    if (currentSessionId && !disabled) {
+      textareaRef.current?.focus();
+    }
+  }, [currentSessionId, disabled]);
 
   const handleSend = useCallback(async () => {
     if (!text.trim() && attachments.length === 0) return;
@@ -90,6 +101,18 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleOptimize = useCallback(async () => {
+    if (!text.trim() || isStreaming) return;
+    try {
+      const result = await javaBridge.optimizePrompt(text);
+      if (result?.optimizedPrompt) {
+        setText(result.optimizedPrompt);
+      }
+    } catch (error) {
+      console.error('Failed to optimize prompt:', error);
+    }
+  }, [text, isStreaming]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape' && isStreaming) {
@@ -124,6 +147,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       <div className="px-2 pt-2">
         <InputToolbar
           onAttach={() => setShowAttachMenu(!showAttachMenu)}
+          onOptimize={handleOptimize}
           isStreaming={isStreaming}
           disabled={disabled}
         />
@@ -159,6 +183,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       <div className="flex items-end gap-2 px-4 pb-4">
         <div className="flex-1 min-w-0">
           <AutoResizeTextarea
+            ref={textareaRef}
             value={text}
             onChange={setText}
             onSubmit={handleSend}

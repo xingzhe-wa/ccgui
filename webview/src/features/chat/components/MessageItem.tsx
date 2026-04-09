@@ -26,7 +26,6 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
-  const isStreaming = message.status === 'streaming';
 
   const handleReply = useCallback(() => {
     onReply?.(message.id);
@@ -157,16 +156,10 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
             'relative px-4 py-3 rounded-2xl',
             isUser
               ? 'bg-userMessage text-userMessage-foreground rounded-tr-md'
-              : 'bg-aiMessage text-aiMessage-foreground rounded-tl-md',
-            isStreaming && 'animate-pulse'
+              : 'bg-aiMessage text-aiMessage-foreground rounded-tl-md'
           )}
         >
           {renderedContent}
-
-          {/* Streaming cursor */}
-          {isStreaming && (
-            <span className="inline-block w-2 h-4 ml-1 bg-primary animate-pulse" />
-          )}
         </div>
 
         {/* Timestamp & Actions */}

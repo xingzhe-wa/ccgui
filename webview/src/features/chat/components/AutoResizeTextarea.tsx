@@ -2,7 +2,7 @@
  * AutoResizeTextarea - 自动调整高度的文本输入框
  */
 
-import { memo, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
+import { memo, useRef, useEffect, useCallback, KeyboardEvent, forwardRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 
 interface AutoResizeTextareaProps {
@@ -16,7 +16,7 @@ interface AutoResizeTextareaProps {
   className?: string;
 }
 
-export const AutoResizeTextarea = memo<AutoResizeTextareaProps>(function AutoResizeTextarea({
+const AutoResizeTextareaInner = forwardRef<HTMLTextAreaElement, AutoResizeTextareaProps>(function AutoResizeTextarea({
   value,
   onChange,
   onSubmit,
@@ -25,8 +25,9 @@ export const AutoResizeTextarea = memo<AutoResizeTextareaProps>(function AutoRes
   maxRows = 10,
   minRows = 1,
   className
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+}, ref) {
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = (ref as React.RefObject<HTMLTextAreaElement>) || internalRef;
 
   const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
@@ -86,5 +87,7 @@ export const AutoResizeTextarea = memo<AutoResizeTextareaProps>(function AutoRes
     />
   );
 });
+
+export const AutoResizeTextarea = memo(AutoResizeTextareaInner);
 
 export type { AutoResizeTextareaProps };

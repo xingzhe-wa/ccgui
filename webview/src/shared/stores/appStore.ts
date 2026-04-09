@@ -9,6 +9,7 @@ import type {
   TaskProgress,
   UIState
 } from '@/shared/types';
+import { useSessionStore } from './sessionStore';
 
 interface AppState {
   // ========== 会话相关 ==========
@@ -73,6 +74,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ========== 会话操作 ==========
   switchSession: (sessionId) => {
     set({ currentSessionId: sessionId });
+    // 同步到 sessionStore，确保 sessionStates 访问正确的会话
+    useSessionStore.getState().setCurrentSession(sessionId);
+    // 如果 sessionStates 中还没有该会话的记录，初始化它
+    useSessionStore.getState().initSessionState(sessionId);
     window.ccBackend?.switchSession(sessionId);
   },
 
@@ -164,6 +169,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const sessions = await window.ccBackend?.searchSessions('');
       if (sessions) {
         set({ sessions });
+        // 为每个会话初始化 sessionState，确保切换时 getSessionState 返回有效状态
+        sessions.forEach((session: ChatSession) => {
+          useSessionStore.getState().initSessionState(session.id);
+        });
       }
     } catch (error) {
       console.error('Failed to initialize sessions:', error);

@@ -227,6 +227,10 @@ class JavaBridge {
     return this.invoke('deleteMcpServer', { serverId });
   }
 
+  async optimizePrompt(prompt: string): Promise<{ optimizedPrompt: string; addedContextCount: number }> {
+    return this.invoke('optimizePrompt', { prompt });
+  }
+
   async submitAnswer(questionId: string, answer: any): Promise<void> {
     return this.invoke('submitAnswer', { questionId, answer });
   }

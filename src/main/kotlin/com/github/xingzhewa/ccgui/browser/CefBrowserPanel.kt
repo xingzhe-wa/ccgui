@@ -5,6 +5,7 @@ import com.github.xingzhewa.ccgui.application.agent.AgentExecutor
 import com.github.xingzhewa.ccgui.application.config.ConfigManager
 import com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine
 import com.github.xingzhewa.ccgui.application.mcp.McpServerManager
+import com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer
 import com.github.xingzhewa.ccgui.application.session.SessionManager
 import com.github.xingzhewa.ccgui.application.skill.SkillExecutor
 import com.github.xingzhewa.ccgui.application.skill.SkillsManager
@@ -77,6 +78,9 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     /** McpServerManager */
     private val mcpServerManager: McpServerManager by lazy { McpServerManager.getInstance(project) }
 
+    /** PromptOptimizer */
+    private val promptOptimizer: PromptOptimizer by lazy { PromptOptimizer.getInstance(project) }
+
     /** 连接状态 */
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -147,6 +151,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 "getThemes" -> handleGetThemes(queryId)
                 "saveCustomTheme" -> handleSaveCustomTheme(queryId, params)
                 "deleteCustomTheme" -> handleDeleteCustomTheme(queryId, params)
+                "optimizePrompt" -> handleOptimizePrompt(queryId, params)
                 // Session
                 "createSession" -> handleCreateSession(queryId, params)
                 "switchSession" -> handleSwitchSession(queryId, params)
@@ -442,6 +447,23 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         val themeId = params?.asJsonObject?.get("themeId")?.asString ?: return null
         configManager.deleteCustomTheme(themeId)
         return mapOf("success" to true)
+    }
+
+    private fun handleOptimizePrompt(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val prompt = params?.asJsonObject?.get("prompt")?.asString ?: ""
+        scope.launch {
+            try {
+                val result = promptOptimizer.optimizePrompt(prompt)
+                sendResponseToJs("optimizePrompt", queryId, mapOf(
+                    "optimizedPrompt" to result.optimizedPrompt,
+                    "addedContextCount" to result.addedContext.size
+                ))
+            } catch (e: Exception) {
+                log.warn("Optimize prompt failed: ${e.message}")
+                sendResponseToJs("optimizePrompt", queryId, null, e.message ?: "优化失败")
+            }
+        }
+        return null  // async response
     }
 
     // ---- Session ----

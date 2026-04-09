@@ -42,6 +42,7 @@ const ToolbarButton = memo<ToolbarButtonProps>(function ToolbarButton({
 interface InputToolbarProps {
   onAttach?: () => void;
   onStop?: () => void;
+  onOptimize?: () => void;
   isStreaming?: boolean;
   disabled?: boolean;
   className?: string;
@@ -50,6 +51,7 @@ interface InputToolbarProps {
 export const InputToolbar = memo<InputToolbarProps>(function InputToolbar({
   onAttach,
   onStop,
+  onOptimize,
   isStreaming = false,
   disabled = false,
   className
@@ -89,6 +91,19 @@ export const InputToolbar = memo<InputToolbarProps>(function InputToolbar({
       />
 
       <div className="flex-1" />
+
+      {onOptimize && (
+        <ToolbarButton
+          icon={
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+          }
+          label="Optimize prompt"
+          onClick={onOptimize}
+          disabled={disabled || isStreaming}
+        />
+      )}
 
       {isStreaming && (
         <ToolbarButton
