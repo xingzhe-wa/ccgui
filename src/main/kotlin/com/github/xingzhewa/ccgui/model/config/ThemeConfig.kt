@@ -157,12 +157,90 @@ data class ThemeConfig(
         )
 
         /**
+         * VSCode Dark 主题预设
+         */
+        val VSCODE_DARK = ThemeConfig(
+            id = "vscode-dark",
+            name = "VSCode Dark",
+            isDark = true,
+            colors = ColorScheme(
+                primary = "#007acc",
+                background = "#1e1e1e",
+                foreground = "#d4d4d4",
+                muted = "#252526",
+                mutedForeground = "#858585",
+                accent = "#007acc",
+                accentForeground = "#ffffff",
+                destructive = "#f14c4c",
+                border = "#3c3c3c",
+                userMessage = "#007acc",
+                aiMessage = "#252526",
+                systemMessage = "#fcc419",
+                codeBackground = "#1e1e1e",
+                codeForeground = "#d4d4d4"
+            )
+        )
+
+        /**
+         * Monokai 主题预设
+         */
+        val MONOKAI = ThemeConfig(
+            id = "monokai",
+            name = "Monokai",
+            isDark = true,
+            colors = ColorScheme(
+                primary = "#f92672",
+                background = "#272822",
+                foreground = "#f8f8f2",
+                muted = "#3e3d32",
+                mutedForeground = "#75715e",
+                accent = "#f92672",
+                accentForeground = "#ffffff",
+                destructive = "#f92672",
+                border = "#3e3d32",
+                userMessage = "#f92672",
+                aiMessage = "#3e3d32",
+                systemMessage = "#e6db74",
+                codeBackground = "#272822",
+                codeForeground = "#f8f8f2"
+            )
+        )
+
+        /**
+         * Nord 主题预设
+         */
+        val NORD = ThemeConfig(
+            id = "nord",
+            name = "Nord",
+            isDark = true,
+            colors = ColorScheme(
+                primary = "#88c0d0",
+                background = "#2e3440",
+                foreground = "#eceff4",
+                muted = "#3b4252",
+                mutedForeground = "#8e99a4",
+                accent = "#88c0d0",
+                accentForeground = "#2e3440",
+                destructive = "#bf616a",
+                border = "#4c566a",
+                userMessage = "#88c0d0",
+                aiMessage = "#3b4252",
+                systemMessage = "#ebcb8b",
+                codeBackground = "#2e3440",
+                codeForeground = "#eceff4"
+            )
+        )
+
+        /**
          * 获取所有预设主题
          */
         fun getPresets(): List<ThemeConfig> = listOf(
             JETBRAINS_DARK,
             JETBRAINS_LIGHT,
-            GITHUB_DARK
+            GITHUB_DARK,
+            VSCODE_DARK,
+            MONOKAI,
+            NORD
         )
 
         /**

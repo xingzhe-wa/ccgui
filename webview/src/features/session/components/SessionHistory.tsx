@@ -213,7 +213,7 @@ export const SessionHistory = memo<SessionHistoryProps>(function SessionHistory(
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* 搜索和过滤栏 */}
-      <div className="flex items-center gap-3 p-4 border-b border-border">
+      <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
         {/* 搜索框 */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -87,5 +87,47 @@
             description="使用 Claude 解释选中的代码">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+        <action
+            id="CCGUI.CodeOptimize"
+            class="com.github.xingzhewa.ccgui.action.CodeOptimizeAction"
+            text="优化代码 (Optimize Code)"
+            description="使用 Claude 优化选中的代码">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action
+            id="CCGUI.CodeComment"
+            class="com.github.xingzhewa.ccgui.action.CodeCommentAction"
+            text="添加注释 (Add Comment)"
+            description="使用 Claude 为选中的代码添加注释">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action
+            id="CCGUI.CodeTest"
+            class="com.github.xingzhewa.ccgui.action.CodeTestAction"
+            text="生成测试 (Generate Test)"
+            description="使用 Claude 为选中的代码生成测试">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action
+            id="CCGUI.CodeRefactor"
+            class="com.github.xingzhewa.ccgui.action.CodeRefactorAction"
+            text="重构代码 (Refactor Code)"
+            description="使用 Claude 重构选中的代码">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action
+            id="CCGUI.CodeBug"
+            class="com.github.xingzhewa.ccgui.action.CodeBugAction"
+            text="分析Bug (Analyze Bug)"
+            description="使用 Claude 分析选中的代码中的Bug">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action
+            id="CCGUI.AddToChat"
+            class="com.github.xingzhewa.ccgui.action.AddToChatAction"
+            text="添加到聊天 (Add to Chat)"
+            description="将选中的代码添加到 CCGUI 聊天窗口">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

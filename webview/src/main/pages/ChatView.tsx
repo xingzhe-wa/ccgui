@@ -5,7 +5,7 @@
  * 构成完整的聊天界面。
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageList } from '@/features/chat/components/MessageList';
 import { ChatInput } from '@/features/chat/components/ChatInput';
 import { QuickActionsPanel } from '@/features/chat/components/QuickActionsPanel';
@@ -40,6 +40,21 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   );
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 响应式：监听容器宽度变化，窄屏时隐藏详情面板
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   const selectedMessage = useMemo(
     () => messages.find((m) => m.id === selectedMessageId) ?? null,
@@ -129,7 +144,7 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={containerRef} className="flex h-full flex-col">
       {/* 主内容区（消息列表 + 预览面板） */}
       <div className="flex flex-1 overflow-hidden">
         {/* 消息列表 */}
@@ -144,8 +159,8 @@ export const ChatView = memo(function ChatView(): JSX.Element {
           />
         </div>
 
-        {/* 消息详情面板 */}
-        {selectedMessage && (
+        {/* 消息详情面板 - 响应式：窄屏(<768px)时隐藏 */}
+        {selectedMessage && containerWidth >= 768 && (
           <div className="w-80 border-l overflow-hidden flex-shrink-0">
             <MessageDetail
               message={selectedMessage}
