@@ -2,10 +2,12 @@
  * React 应用根组件
  */
 
-import { Suspense, Component, type ReactNode } from 'react';
+import { Suspense, Component, type ReactNode, useEffect, useCallback } from 'react';
 import { JcefBrowser } from './components/JcefBrowser';
 import { AppRouter } from './router';
 import { useAppStore } from '@/shared/stores';
+import { useQuestionStore } from '@/shared/stores/questionStore';
+import type { InteractiveQuestion } from '@/shared/types/interaction';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -55,6 +57,34 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 }
 
 function App(): JSX.Element {
+  // 订阅来自 Java 后端的交互式问题推送
+  const handleStreamingQuestion = useCallback((data: any) => {
+    const question: InteractiveQuestion = {
+      questionId: data.questionId,
+      question: data.message,
+      questionType: data.questionType,
+      options: data.options?.map((opt: any) => ({
+        id: opt.id,
+        label: opt.label,
+        description: opt.description ?? undefined,
+        icon: opt.icon ?? undefined
+      })),
+      allowMultiple: false,
+      required: true,
+      context: {},
+      createdAt: Date.now()
+    };
+    useQuestionStore.getState().setQuestion(question);
+  }, []);
+
+  useEffect(() => {
+    const handler = (data: any) => handleStreamingQuestion(data);
+    window.ccEvents?.on('streaming:question', handler);
+    return () => {
+      window.ccEvents?.off('streaming:question', handler);
+    };
+  }, [handleStreamingQuestion]);
+
   return (
     <ErrorBoundary>
       <JcefBrowser onReady={() => useAppStore.getState().initializeSessions()}>

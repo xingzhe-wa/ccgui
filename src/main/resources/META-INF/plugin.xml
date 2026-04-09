@@ -77,4 +77,15 @@
         <postStartupActivity
             implementation="com.github.xingzhewa.ccgui.startup.MyProjectActivity"/>
     </extensions>
+
+    <!-- Actions -->
+    <actions>
+        <action
+            id="CCGUI.CodeExplain"
+            class="com.github.xingzhewa.ccgui.action.CodeExplainAction"
+            text="解释代码 (Explain Code)"
+            description="使用 Claude 解释选中的代码">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

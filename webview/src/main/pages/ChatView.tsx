@@ -5,13 +5,14 @@
  * 构成完整的聊天界面。
  */
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { MessageList } from '@/features/chat/components/MessageList';
 import { ChatInput } from '@/features/chat/components/ChatInput';
 import { QuickActionsPanel } from '@/features/chat/components/QuickActionsPanel';
 import { StreamingMessage } from '@/features/streaming/components/StreamingMessage';
 import { StopButton } from '@/features/streaming/components/StopButton';
 import { InteractiveQuestionPanel } from '@/features/interaction/components/InteractiveQuestionPanel';
+import { MessageDetail } from '@/features/chat/components/PreviewPanel/MessageDetail';
 import { useSessionStore } from '@/shared/stores/sessionStore';
 import { useStreamingStore } from '@/shared/stores/streamingStore';
 import { useQuestionStore } from '@/shared/stores/questionStore';
@@ -36,6 +37,13 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   const messages = useMemo<ChatMessage[]>(
     () => sessionState?.messages ?? [],
     [sessionState?.messages]
+  );
+
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+
+  const selectedMessage = useMemo(
+    () => messages.find((m) => m.id === selectedMessageId) ?? null,
+    [messages, selectedMessageId]
   );
 
   const handleSend = useCallback(
@@ -101,6 +109,10 @@ export const ChatView = memo(function ChatView(): JSX.Element {
     useSessionStore.getState().removeMessage(messageId);
   }, []);
 
+  const handleSelectMessage = useCallback((messageId: string) => {
+    setSelectedMessageId((prev) => (prev === messageId ? null : messageId));
+  }, []);
+
   const handleQuickAction = useCallback(
     (action: string) => {
       handleSend(action);
@@ -118,14 +130,29 @@ export const ChatView = memo(function ChatView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
-      {/* 消息列表 */}
-      <div className="flex-1 overflow-hidden">
-        <MessageList
-          messages={messages}
-          onReply={handleReply}
-          onDelete={handleDelete}
-          onCopy={handleCopy}
-        />
+      {/* 主内容区（消息列表 + 预览面板） */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 消息列表 */}
+        <div className="flex-1 overflow-hidden">
+          <MessageList
+            messages={messages}
+            onReply={handleReply}
+            onDelete={handleDelete}
+            onCopy={handleCopy}
+            onSelect={handleSelectMessage}
+            selectedMessageId={selectedMessageId}
+          />
+        </div>
+
+        {/* 消息详情面板 */}
+        {selectedMessage && (
+          <div className="w-80 border-l overflow-hidden flex-shrink-0">
+            <MessageDetail
+              message={selectedMessage}
+              onClose={() => setSelectedMessageId(null)}
+            />
+          </div>
+        )}
       </div>
 
       {/* 流式输出消息 */}

@@ -14,6 +14,7 @@ import com.github.xingzhewa.ccgui.bridge.ConnectionState
 import com.github.xingzhewa.ccgui.model.agent.Agent
 import com.github.xingzhewa.ccgui.model.interaction.QuestionType
 import com.github.xingzhewa.ccgui.model.mcp.McpServer
+import com.github.xingzhewa.ccgui.model.session.ChatSession
 import com.github.xingzhewa.ccgui.model.session.SessionType
 import com.github.xingzhewa.ccgui.model.skill.Skill
 import com.github.xingzhewa.ccgui.util.JsonUtils
@@ -486,27 +487,13 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     private fun handleExportSession(queryId: Int, params: com.google.gson.JsonElement?): Any? {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return null
         val session = sessionManager.getSession(sessionId) ?: return null
-        return mapOf(
-            "id" to session.id,
-            "name" to session.name,
-            "type" to session.type.name,
-            "messages" to session.messages.map { msg ->
-                mapOf(
-                    "id" to msg.id,
-                    "role" to msg.role.name,
-                    "content" to msg.content,
-                    "timestamp" to msg.timestamp
-                )
-            }
-        )
+        return session.toJson()
     }
 
     private fun handleImportSession(queryId: Int, params: com.google.gson.JsonElement?): Any? {
         val jsonObj = params?.asJsonObject ?: return null
-        val name = jsonObj.get("name")?.asString ?: "Imported Session"
-        val typeStr = jsonObj.get("type")?.asString ?: "PROJECT"
-        val type = try { SessionType.valueOf(typeStr) } catch (_: Exception) { SessionType.PROJECT }
-        val session = sessionManager.createSession(name, type)
+        val jsonContent = jsonObj.get("data")?.asString ?: return null
+        val session = sessionManager.importSession(jsonContent) ?: return null
         return mapOf("id" to session.id, "name" to session.name)
     }
 

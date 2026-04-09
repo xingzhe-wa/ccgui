@@ -56,7 +56,8 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
         val state: QuestionState = QuestionState.PENDING,
         val createdAt: Long = System.currentTimeMillis(),
         val answeredAt: Long? = null,
-        val answer: QuestionAnswer? = null
+        val answer: QuestionAnswer? = null,
+        val answerDeferred: CompletableDeferred<QuestionAnswer?> = CompletableDeferred()
     )
 
     /**
@@ -99,53 +100,56 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
      *
      * @param question 问题
      * @param timeout 超时时间（毫秒）
+     * @param onQuestionAsked JS回调：推送问题到前端（null表示不推送，如权限场景）
      * @return 答案
      */
     suspend fun askQuestion(
         question: InteractiveQuestion,
-        timeout: Long = question.timeout
-    ): QuestionAnswer? = stateMutex.withLock {
-        try {
-            // 1. 添加到待回答列表
-            val pendingQuestion = PendingQuestion(question)
+        timeout: Long = question.timeout,
+        onQuestionAsked: ((InteractiveQuestion) -> Unit)? = null
+    ): QuestionAnswer? {
+        val deferred = CompletableDeferred<QuestionAnswer?>()
+
+        // 1. 添加到待回答列表（持有锁的瞬间完成）
+        stateMutex.withLock {
+            val pendingQuestion = PendingQuestion(question, answerDeferred = deferred)
             pendingQuestions[question.questionId] = pendingQuestion
-
-            // 2. 更新活跃问题
             _activeQuestionId.value = question.questionId
-
-            // 3. 更新队列显示
             updateQuestionQueue()
-
-            // 4. 发布问题事件
             EventBus.publish(InteractiveQuestionEvent(question))
-
             log.info("Question created: ${question.questionId}, type=${question.questionType}")
+        }
 
-            // 5. 等待答案（带超时）
-            val answer = waitForAnswer(question.questionId, timeout)
+        // 2. 通知前端（如果提供了回调）
+        onQuestionAsked?.invoke(question)
 
-            // 6. 更新问题状态
-            val updatedPending = pendingQuestions[question.questionId]?.copy(
-                state = if (answer != null) QuestionState.ANSWERED else QuestionState.TIMEOUT,
-                answeredAt = System.currentTimeMillis(),
-                answer = answer
-            )
-            if (updatedPending != null) {
-                pendingQuestions[question.questionId] = updatedPending
+        // 3. 等待答案（不使用锁，避免与 submitAnswer 形成死锁）
+        return try {
+            val answer = waitForAnswer(question.questionId, timeout, deferred)
+
+            // 4. 更新问题状态
+            stateMutex.withLock {
+                val updatedPending = pendingQuestions[question.questionId]?.copy(
+                    state = if (answer != null) QuestionState.ANSWERED else QuestionState.TIMEOUT,
+                    answeredAt = System.currentTimeMillis(),
+                    answer = answer
+                )
+                if (updatedPending != null) {
+                    pendingQuestions[question.questionId] = updatedPending
+                }
+                _activeQuestionId.value = null
+                updateQuestionQueue()
             }
-
-            // 7. 清理活跃问题
-            _activeQuestionId.value = null
-            updateQuestionQueue()
-
             answer
         } catch (e: CancellationException) {
             log.warn("Question cancelled: ${question.questionId}")
-            val currentPending = pendingQuestions[question.questionId]
-            if (currentPending != null) {
-                pendingQuestions[question.questionId] = currentPending.copy(
-                    state = QuestionState.CANCELLED
-                )
+            stateMutex.withLock {
+                val currentPending = pendingQuestions[question.questionId]
+                if (currentPending != null) {
+                    pendingQuestions[question.questionId] = currentPending.copy(
+                        state = QuestionState.CANCELLED
+                    )
+                }
             }
             null
         }
@@ -209,25 +213,34 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
      */
     fun submitAnswer(questionId: String, answer: QuestionAnswer) {
         scope.launch {
-            stateMutex.withLock {
-                val pending = pendingQuestions[questionId]
-                if (pending != null && pending.state == QuestionState.PENDING) {
-                    // 验证答案类型
-                    val validatedAnswer = validateAnswer(pending.question, answer)
-                    if (validatedAnswer != null) {
-                        pendingQuestions[questionId] = pending.copy(
-                            state = QuestionState.ANSWERED,
-                            answeredAt = System.currentTimeMillis(),
-                            answer = validatedAnswer
-                        )
-
-                        log.info("Answer submitted: questionId=$questionId")
-                        EventBus.publish(QuestionAnsweredEvent(questionId, validatedAnswer))
-                    } else {
-                        log.warn("Invalid answer type for question: $questionId")
-                    }
-                }
+            // 查找 pending question（ConcurrentHashMap 支持并发读取）
+            val pending = pendingQuestions[questionId]
+            if (pending == null || pending.state != QuestionState.PENDING) {
+                log.warn("Question not found or not pending: $questionId")
+                return@launch
             }
+
+            // 验证答案类型
+            val validatedAnswer = validateAnswer(pending.question, answer)
+            if (validatedAnswer == null) {
+                log.warn("Invalid answer type for question: $questionId")
+                return@launch
+            }
+
+            // 通过 Deferred 唤醒等待中的 askQuestion（无需持有 stateMutex）
+            pending.answerDeferred.complete(validatedAnswer)
+
+            // 更新内部状态
+            stateMutex.withLock {
+                pendingQuestions[questionId] = pending.copy(
+                    state = QuestionState.ANSWERED,
+                    answeredAt = System.currentTimeMillis(),
+                    answer = validatedAnswer
+                )
+            }
+
+            log.info("Answer submitted: questionId=$questionId")
+            EventBus.publish(QuestionAnsweredEvent(questionId, validatedAnswer))
         }
     }
 
@@ -293,37 +306,18 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
     // ==================== 内部方法 ====================
 
     /**
-     * 等待答案
+     * 等待答案（通过 CompletableDeferred，无锁轮询）
      */
     private suspend fun waitForAnswer(
         questionId: String,
-        timeout: Long
-    ): QuestionAnswer? = kotlinx.coroutines.withTimeout(timeout * 1000) {
-        var result: QuestionAnswer? = null
-        while (result == null) {
-            val pending = pendingQuestions[questionId]
-            result = when {
-                pending == null -> {
-                    log.warn("Question not found: $questionId")
-                    null
-                }
-                pending.state == QuestionState.ANSWERED -> {
-                    pending.answer
-                }
-                pending.state == QuestionState.CANCELLED -> {
-                    null
-                }
-                pending.state == QuestionState.TIMEOUT -> {
-                    null
-                }
-                else -> {
-                    // 继续等待
-                    delay(100)
-                    null
-                }
-            }
+        timeout: Long,
+        deferred: CompletableDeferred<QuestionAnswer?>
+    ): QuestionAnswer? = try {
+        kotlinx.coroutines.withTimeout(timeout * 1000) {
+            deferred.await()
         }
-        result
+    } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+        null
     }
 
     /**

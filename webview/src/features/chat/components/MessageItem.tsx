@@ -12,6 +12,8 @@ interface MessageItemProps {
   onReply?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
   onCopy?: (messageId: string, content: string) => void;
+  onSelect?: (messageId: string) => void;
+  isSelected?: boolean;
   className?: string;
 }
 
@@ -20,6 +22,8 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
   onReply,
   onDelete,
   onCopy,
+  onSelect,
+  isSelected,
   className
 }) {
   const [isHovered, setIsHovered] = useState(false);
@@ -38,6 +42,10 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
   const handleCopy = useCallback(() => {
     onCopy?.(message.id, message.content);
   }, [message.id, message.content, onCopy]);
+
+  const handleSelect = useCallback(() => {
+    onSelect?.(message.id);
+  }, [message.id, onSelect]);
 
   const renderedContent = useMemo(() => {
     // Render text content
@@ -117,13 +125,15 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
   return (
     <div
       className={cn(
-        'group relative flex gap-3 py-4 px-4',
+        'group relative flex gap-3 py-4 px-4 cursor-pointer',
         isUser ? 'flex-row-reverse' : 'flex-row',
         !isHovered && !isUser && 'opacity-70',
+        isSelected && !isUser && 'ring-2 ring-primary rounded-lg',
         className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleSelect}
     >
       {/* Avatar */}
       <div

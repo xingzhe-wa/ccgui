@@ -176,6 +176,23 @@ class SessionManager(private val project: Project) : Disposable {
         return sessionStorage.getSessionsByType(type)
     }
 
+    /**
+     * 导入会话（从 JSON）
+     */
+    fun importSession(jsonContent: String): ChatSession? {
+        return try {
+            val json = com.google.gson.JsonParser.parseString(jsonContent).asJsonObject
+            val session = ChatSession.fromJson(json) ?: return null
+            sessionStorage.saveSession(session)
+            _sessions.value = sessionStorage.getAllSessions()
+            log.info("Imported session: ${session.id}")
+            session
+        } catch (e: Exception) {
+            log.warn("Failed to import session: ${e.message}")
+            null
+        }
+    }
+
     override fun dispose() {
         // 持久化未保存的更改
         sessionStorage.flush()

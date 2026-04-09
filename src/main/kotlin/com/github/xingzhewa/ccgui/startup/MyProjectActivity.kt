@@ -4,7 +4,9 @@ import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkPermissionHandler
 import com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine
 import com.github.xingzhewa.ccgui.application.session.SessionManager
+import com.github.xingzhewa.ccgui.browser.CefBrowserPanel
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
+import com.github.xingzhewa.ccgui.infrastructure.eventbus.InteractiveQuestionEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.PermissionRequestEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.QuestionAnsweredEvent
 import com.github.xingzhewa.ccgui.util.logger
@@ -50,12 +52,20 @@ class MyProjectActivity : ProjectActivity, Disposable {
                 handlePermissionRequest(event)
             }
         }
+
+        // 订阅交互式问题事件，推送到 JavaScript 前端显示交互面板
+        EventBus.subscribeType(InteractiveQuestionEvent::class.java) { event ->
+            scope.launch {
+                pushQuestionToJavaScript(event.question)
+            }
+        }
     }
 
     private suspend fun handlePermissionRequest(event: PermissionRequestEvent) {
         val project = currentProject ?: return
         val engine = InteractiveRequestEngine.getInstance(project)
-        val answer = engine.askQuestion(event.question)
+        // 权限场景不推送到 JS，传递 null 回调
+        val answer = engine.askQuestion(event.question, onQuestionAsked = null)
         // 将用户回答路由回 SdkPermissionHandler
         val decision = when (answer) {
             is InteractiveRequestEngine.QuestionAnswer.Confirmation -> {
@@ -64,6 +74,38 @@ class MyProjectActivity : ProjectActivity, Disposable {
             else -> SdkPermissionHandler.Decision.DENY
         }
         SdkPermissionHandler.getInstance(project).submitDecision(event.requestId, decision)
+    }
+
+    /**
+     * 将交互式问题推送到 JavaScript 前端
+     */
+    private fun pushQuestionToJavaScript(question: com.github.xingzhewa.ccgui.model.interaction.InteractiveQuestion) {
+        val project = currentProject ?: return
+        // 查找 CefBrowserPanel 实例（通过 ToolWindow）
+        try {
+            val toolWindowManager = com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
+            val toolWindow = toolWindowManager.getToolWindow("ClaudeCodeJet")
+            val cefPanel = toolWindow?.component?.getComponent(0)
+            if (cefPanel is CefBrowserPanel) {
+                cefPanel.sendToJavaScript("streaming:question", mapOf(
+                    "questionId" to question.questionId,
+                    "questionType" to question.questionType.name,
+                    "message" to question.question,
+                    "options" to question.options.map { opt ->
+                        mapOf(
+                            "id" to opt.id,
+                            "label" to opt.label,
+                            "description" to (opt.description ?: "")
+                        )
+                    },
+                    "required" to question.required
+                ))
+            } else {
+                log.warn("CefBrowserPanel not found for question push")
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to push question to JavaScript: ${e.message}")
+        }
     }
 
     override fun dispose() {

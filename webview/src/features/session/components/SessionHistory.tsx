@@ -27,6 +27,8 @@ export interface SessionHistoryProps {
   onRestoreSession?: (sessionId: string) => void;
   /** 导出会话回调 */
   onExportSession?: (session: ChatSession) => void;
+  /** 导入会话回调 */
+  onImportSession?: () => void;
   className?: string;
 }
 
@@ -90,6 +92,7 @@ export const SessionHistory = memo<SessionHistoryProps>(function SessionHistory(
   onDeleteSession,
   onRestoreSession,
   onExportSession,
+  onImportSession,
   className
 }: SessionHistoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,6 +246,21 @@ export const SessionHistory = memo<SessionHistoryProps>(function SessionHistory(
           <option value={SessionTypeEnum.GLOBAL}>全局</option>
           <option value={SessionTypeEnum.TEMPORARY}>临时</option>
         </select>
+
+        {/* 导入按钮 */}
+        {onImportSession && (
+          <button
+            onClick={onImportSession}
+            className={cn(
+              'h-9 px-3 text-sm',
+              'bg-accent/50 border border-border rounded-md',
+              'hover:bg-accent transition-colors',
+              'flex items-center gap-1.5'
+            )}
+          >
+            导入
+          </button>
+        )}
       </div>
 
       {/* 会话列表 */}

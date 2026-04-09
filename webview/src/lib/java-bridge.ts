@@ -163,7 +163,7 @@ class JavaBridge {
     return this.invoke('exportSession', { sessionId, format });
   }
 
-  async importSession(data: ArrayBuffer): Promise<any> {
+  async importSession(data: string): Promise<any> {
     return this.invoke('importSession', { data });
   }
 

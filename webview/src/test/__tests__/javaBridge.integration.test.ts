@@ -227,7 +227,7 @@ describe('JavaBridge Integration', () => {
     });
 
     it('importSession 应该发送正确的参数', () => {
-      const data = new ArrayBuffer(100);
+      const data = '{"id":"test","name":"Test"}';
       javaBridge.importSession(data);
 
       expect(mockSend).toHaveBeenCalledWith({

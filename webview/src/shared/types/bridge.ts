@@ -103,7 +103,7 @@ export interface JavaBackendAPI {
   /**
    * 导入会话
    */
-  importSession(data: ArrayBuffer): Promise<ChatSession>;
+  importSession(data: string): Promise<{ id: string; name: string }>;
 
   // ========== Skills相关 ==========
   /**
