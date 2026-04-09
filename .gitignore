@@ -6,3 +6,4 @@
 .qodana
 build
 /webview/node_modules
+/webview/dist
