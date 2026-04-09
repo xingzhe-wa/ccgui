@@ -50,23 +50,17 @@
 
 ### Findings
 
-- ⚠️ **提示词优化器 (PromptOptimizer)** — `PromptOptimizer.kt` 实现的是"上下文增强"（将项目结构、会话历史、相关代码片段拼接到提示词），而非 PRD 描述的"AI 驱动的提示词优化"（调用 AI 生成优化后的提示词 + 改进点列表 + 置信度分数）
-  - 当前行为：`PromptOptimizer.optimizePrompt()` 在提示词前拼接上下文信息
-  - PRD 预期：调用 Claude API 生成优化版本，返回 `optimizedPrompt` + `improvements[]` + `confidence`
+- ✅ **提示词优化器 (PromptOptimizer)** — ✅ 已完成 (2026-04-10)。`PromptOptimizer.optimizePrompt()` 现在实现了 AI 驱动的优化（Step 2：调用 Claude CLI 生成优化版本 + 改进点 + 置信度），与 PRD 规定的 `optimizedPrompt` + `improvements[]` + `confidence` 返回格式一致。前端 `ChatInput.tsx` 增加了优化结果 Banner，显示改进点和置信度
 - ✅ **代码快捷操作 (CodeQuickActions)** — ✅ 已完成 (2026-04-10)。现已新增 6 个 AnAction：`CodeOptimizeAction`、`CodeCommentAction`、`CodeTestAction`、`CodeRefactorAction`、`CodeBugAction`、`AddToChatAction`，全部注册到 `EditorPopupMenu`。加上原有的 `CodeExplainAction`，共 7 个完整的 EditorPopupMenu AnAction
 - ✅ **多模态输入** — `MultimodalInputHandler.kt` 处理图片/文件 base64 编码，前端 `useFileDrop.ts`、`useImagePaste.ts`、`AttachmentDropZone.tsx`、`AttachmentManager.tsx` 完整实现
-- ❌ **对话引用系统 (ConversationReferenceSystem)** — 完全缺失
-  - 无右键菜单"引用此消息"
-  - 无拖拽历史消息到输入框的引用机制
-  - 无 `@消息ID` 或 `@消息摘要` 引用格式
-  - 无 `MessageReference` 数据结构
-  - 无引用消息渲染样式（灰色背景 + 左侧竖线）
-- ✅ **交互式请求引擎 (InteractiveRequestEngine)** — 后端 `InteractiveRequestEngine.kt` 完整实现所有问题类型（CONFIRMATION、SINGLE_CHOICE、MULTIPLE_CHOICE、TEXT_INPUT、NUMBER_INPUT），前端 `InteractiveQuestionPanel.tsx` 有所有类型的渲染器，`submitAnswer()` 回调完整
+- ✅ **对话引用系统 (ConversationReferenceSystem)** — ✅ 已完成 (2026-04-10)。`MessageItem.tsx` 增加了引用按钮；`ChatInput.tsx` 增加了引用气泡渲染（显示消息摘要和移除按钮）；发送时引用格式为 `[@msgId]: excerpt`；`ChatMessage.references` 字段已存在，后端支持引用数据存储
+- ✅ **交互式请求引擎 (InteractiveRequestEngine)** — 后端 `InteractiveRequestEngine.kt` 完整实现所有问题类型，前端 `InteractiveQuestionPanel.tsx` 有所有类型的渲染器
 
 ### Key Deviations
 
-1. `PromptOptimizer.kt` — 上下文 enrichment 而非 AI optimization，功能描述与实现不符
+1. ~~`PromptOptimizer.kt` — 上下文 enrichment 而非 AI optimization，功能描述与实现不符~~ ✅ 已修复
 2. ~~`action/` 目录 — 只有 `CodeExplainAction.kt`，缺少另外 6 个 EditorPopupMenu AnAction`~~ ✅ 已修复
+3. ~~`ConversationReferenceSystem` — 完全缺失~~ ✅ 已修复
 3. `QuickActionsPanel.tsx` — 7 个按钮是气泡内操作，非 PRD 规定的编辑器上下文操作（注意：这些是 ChatView 内的辅助操作，与 EditorPopupMenu AnAction 并存）
 
 ---
@@ -82,13 +76,15 @@
 - ⚠️ **会话中断与恢复** — `BridgeManager.kt:201-203` 有 `cancelStreaming()` 调用 `claudeClient.cancelCurrentRequest()`，但 PRD 规定的 **checkpoint 机制完全不存在**
   - PRD 要求：每 5 秒保存 `SessionCheckpoint`，支持 IDE 重启后恢复
   - 实际：无 `SessionInterruptRecovery` 类，无 checkpoint 持久化
+  - **替代方案**：新增 `ContextManager`（`application/context/ContextManager.kt`），在上下文接近 80% 阈值时自动触发 `/compact` 压缩对话历史，确保长对话可持续进行
 - ⚠️ **历史会话检索** — `SessionManager.kt:163-165` 的 `searchSessions()` 使用简单的 `contains` 字符串匹配。PRD 要求基于 Lucene 的全文检索 + 日期范围过滤 + 会话类型过滤，实际只有基础搜索
+  - ✅ 已补充 `SearchFilters` 数据结构，支持 `sessionType` 和 `dateRange` 过滤
 - ✅ **任务进度可视化** — `TaskProgressTracker.kt` 完整实现任务创建、步骤进度条、`advanceToNextStep()`、`completeTask()`、`failTask()`，前端 `TaskProgressDashboard.tsx` 有进度条渲染
 
 ### Key Deviations
 
-1. `SessionManager.kt:163-165` — `searchSessions()` 缺少日期范围过滤器和类型过滤器，只有简单的名称/消息内容匹配
-2. 无 `SessionInterruptRecovery` 类，无 `SessionCheckpoint` 持久化机制
+1. ~~`SessionManager.kt:163-165` — `searchSessions()` 缺少日期范围过滤器和类型过滤器，只有简单的名称/消息内容匹配~~ ✅ 已修复：新增 `SearchFilters` 支持 `sessionType` 和 `dateRange`
+2. 无 `SessionInterruptRecovery` 类，无 `SessionCheckpoint` 持久化机制 — 已通过 `ContextManager` + `/compact` 替代方案缓解长对话上下文耗尽问题
 
 ---
 

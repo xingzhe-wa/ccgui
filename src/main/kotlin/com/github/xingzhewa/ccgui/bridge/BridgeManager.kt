@@ -4,6 +4,7 @@ import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkOptions
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkSessionManager
+import com.github.xingzhewa.ccgui.application.context.ContextManager
 import com.github.xingzhewa.ccgui.util.JsonUtils
 import com.github.xingzhewa.ccgui.util.logger
 import com.intellij.openapi.Disposable
@@ -29,6 +30,7 @@ class BridgeManager(private val project: Project) : Disposable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val claudeClient: ClaudeCodeClient by lazy { ClaudeCodeClient.getInstance(project) }
     private val sdkSessionManager: SdkSessionManager by lazy { SdkSessionManager.getInstance(project) }
+    private val contextManager: ContextManager by lazy { ContextManager.getInstance(project) }
 
     /** 连接状态 — 使用Mutex保证线程安全 */
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -66,12 +68,25 @@ class BridgeManager(private val project: Project) : Disposable {
         // 使用ensureActive来检查scope是否被取消
         scope.launch {
             ensureActive()
+
+            // 0. 记录用户消息长度
+            contextManager.recordUserMessage(sessionId, message)
+
+            // 0.5. 检查上下文长度，必要时触发压缩
+            if (contextManager.shouldCompact(sessionId)) {
+                log.info("ContextManager: Context threshold reached for session $sessionId, triggering compaction before send")
+                contextManager.compact(sessionId)
+            }
+
             stateMutex.withLock {
                 _connectionState.value = ConnectionState.CONNECTED
             }
             try {
                 val result = claudeClient.sendMessage(message, options, object : ClaudeCodeClient.SdkEventListener {
+                    private var fullResponse = ""
+
                     override fun onTextDelta(text: String) {
+                        fullResponse += text
                         // 检查job是否还在运行
                         if (isActive) {
                             callback.onLineReceived(text)
@@ -80,6 +95,9 @@ class BridgeManager(private val project: Project) : Disposable {
 
                     override fun onResult(message: SdkMessageTypes.SdkResultMessage) {
                         if (isActive) {
+                            // 记录助手响应长度
+                            contextManager.recordAssistantMessage(sessionId, fullResponse)
+
                             callback.onStreamComplete(emptyList())
                             // 发送 'response' 事件以 resolve 前端 javaBridge.invoke() 的 promise
                             val result = mapOf(
@@ -146,12 +164,25 @@ class BridgeManager(private val project: Project) : Disposable {
 
         scope.launch {
             ensureActive()
+
+            // 记录用户消息长度
+            contextManager.recordUserMessage(sessionId, message)
+
+            // 检查上下文长度，必要时触发压缩
+            if (contextManager.shouldCompact(sessionId)) {
+                log.info("ContextManager: Context threshold reached for session $sessionId, triggering compaction before stream")
+                contextManager.compact(sessionId)
+            }
+
             stateMutex.withLock {
                 _connectionState.value = ConnectionState.CONNECTED
             }
             try {
                 val result = claudeClient.sendMessage(message, options, object : ClaudeCodeClient.SdkEventListener {
+                    private var fullResponse = ""
+
                     override fun onTextDelta(text: String) {
+                        fullResponse += text
                         if (isActive) {
                             callback.onLineReceived(text)
                         }
@@ -159,6 +190,8 @@ class BridgeManager(private val project: Project) : Disposable {
 
                     override fun onResult(message: SdkMessageTypes.SdkResultMessage) {
                         if (isActive) {
+                            // 记录助手响应长度
+                            contextManager.recordAssistantMessage(sessionId, fullResponse)
                             callback.onStreamComplete(emptyList())
                             onResponse?.invoke(null, null)
                         }

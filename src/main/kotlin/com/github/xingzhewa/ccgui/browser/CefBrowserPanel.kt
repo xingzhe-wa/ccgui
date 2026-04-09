@@ -457,7 +457,9 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 val result = promptOptimizer.optimizePrompt(prompt)
                 sendResponseToJs("optimizePrompt", queryId, mapOf(
                     "optimizedPrompt" to result.optimizedPrompt,
-                    "addedContextCount" to result.addedContext.size
+                    "addedContextCount" to result.addedContext.size,
+                    "improvements" to result.improvements,
+                    "confidence" to result.confidence
                 ))
             } catch (e: Exception) {
                 log.warn("Optimize prompt failed: ${e.message}")

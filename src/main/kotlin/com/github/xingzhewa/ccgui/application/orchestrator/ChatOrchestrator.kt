@@ -3,6 +3,7 @@ package com.github.xingzhewa.ccgui.application.orchestrator
 import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkOptions
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkSessionManager
+import com.github.xingzhewa.ccgui.application.context.ContextManager
 import com.github.xingzhewa.ccgui.application.session.SessionManager
 import com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
@@ -35,6 +36,7 @@ class ChatOrchestrator(private val project: Project) : Disposable {
     private val sessionManager: SessionManager by lazy { SessionManager.getInstance(project) }
     private val streamingEngine: StreamingOutputEngine by lazy { StreamingOutputEngine.getInstance(project) }
     private val sdkSessionManager: SdkSessionManager by lazy { SdkSessionManager.getInstance(project) }
+    private val contextManager: ContextManager by lazy { ContextManager.getInstance(project) }
 
     /** 是否正在处理消息 */
     private val _isProcessing = MutableStateFlow(false)
@@ -61,6 +63,15 @@ class ChatOrchestrator(private val project: Project) : Disposable {
         try {
             val session = sessionManager.getCurrentSession()
                 ?: return@withContext Result.failure(IllegalStateException("No active session"))
+
+            // 0. 记录用户消息长度（用于上下文追踪）
+            contextManager.recordUserMessage(session.id, content)
+
+            // 0.5. 检查上下文长度，必要时触发压缩
+            if (contextManager.shouldCompact(session.id)) {
+                log.info("ContextManager: Context threshold reached for session ${session.id}, triggering compaction")
+                contextManager.compact(session.id)
+            }
 
             // 1. 添加用户消息
             val userMessage = ChatMessage.userMessage(content)
@@ -102,7 +113,10 @@ class ChatOrchestrator(private val project: Project) : Disposable {
                 }
             })
 
-            // 5. 保存助手消息
+            // 5. 记录助手消息长度（用于上下文追踪）
+            contextManager.recordAssistantMessage(session.id, fullContent)
+
+            // 6. 保存助手消息
             val finalMessage = assistantMessage.copy(
                 content = fullContent,
                 status = MessageStatus.COMPLETED

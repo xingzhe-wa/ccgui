@@ -14,6 +14,7 @@ interface MessageListProps {
   onDelete?: (messageId: string) => void;
   onCopy?: (messageId: string, content: string) => void;
   onSelect?: (messageId: string) => void;
+  onQuote?: (messageId: string, excerpt: string) => void;
   selectedMessageId?: string | null;
   className?: string;
 }
@@ -27,6 +28,7 @@ export const MessageList = memo<MessageListProps>(function MessageList({
   onDelete,
   onCopy,
   onSelect,
+  onQuote,
   selectedMessageId,
   className
 }) {
@@ -107,6 +109,7 @@ export const MessageList = memo<MessageListProps>(function MessageList({
                 onDelete={onDelete}
                 onCopy={onCopy}
                 onSelect={onSelect}
+                onQuote={onQuote}
                 isSelected={selectedMessageId === message.id}
               />
             </div>

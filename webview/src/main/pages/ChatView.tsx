@@ -17,7 +17,7 @@ import { useSessionStore } from '@/shared/stores/sessionStore';
 import { useStreamingStore } from '@/shared/stores/streamingStore';
 import { useQuestionStore } from '@/shared/stores/questionStore';
 import { javaBridge } from '@/lib/java-bridge';
-import type { ChatMessage, ContentPart, QuestionAnswer } from '@/shared/types';
+import type { ChatMessage, ContentPart, MessageReference, QuestionAnswer } from '@/shared/types';
 import { MessageRole, MessageStatus } from '@/shared/types';
 import type { QuestionType } from '@/shared/types/interaction';
 
@@ -40,6 +40,7 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   );
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [references, setReferences] = useState<MessageReference[]>([]);
   const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -62,15 +63,22 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   );
 
   const handleSend = useCallback(
-    (content: string, attachments?: ContentPart[]) => {
+    (content: string, attachments?: ContentPart[], refs?: MessageReference[]) => {
       if (!currentSessionId) return;
+
+      // 将引用格式化为文本内容
+      const refsText = refs && refs.length > 0
+        ? refs.map((r) => `[@${r.messageId.slice(0, 8)}]: ${r.excerpt}`).join('\n') + '\n\n'
+        : '';
+      const fullContent = refsText + content;
 
       const userMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: MessageRole.USER,
-        content,
+        content: fullContent,
         timestamp: Date.now(),
         attachments,
+        references: refs,
         status: MessageStatus.SENT
       };
       addMessage(userMessage);
@@ -90,14 +98,17 @@ export const ChatView = memo(function ChatView(): JSX.Element {
       if (attachments && attachments.length > 0) {
         javaBridge.sendMultimodalMessage({
           sessionId: currentSessionId,
-          content,
+          content: fullContent,
           attachments
         });
       } else {
         javaBridge.sendMessage(
-          JSON.stringify({ sessionId: currentSessionId, content })
+          JSON.stringify({ sessionId: currentSessionId, content: fullContent })
         );
       }
+
+      // 发送后清空引用
+      setReferences([]);
     },
     [currentSessionId, addMessage, startStreaming]
   );
@@ -122,6 +133,25 @@ export const ChatView = memo(function ChatView(): JSX.Element {
 
   const handleDelete = useCallback((messageId: string) => {
     useSessionStore.getState().removeMessage(messageId);
+  }, []);
+
+  const handleQuote = useCallback((messageId: string, excerpt: string) => {
+    const message = messages.find((m) => m.id === messageId);
+    if (!message) return;
+    const ref: MessageReference = {
+      messageId: message.id,
+      excerpt,
+      timestamp: message.timestamp,
+      sender: message.role
+    };
+    setReferences((prev) => {
+      if (prev.some((r) => r.messageId === messageId)) return prev;
+      return [...prev, ref];
+    });
+  }, [messages]);
+
+  const handleRemoveReference = useCallback((messageId: string) => {
+    setReferences((prev) => prev.filter((r) => r.messageId !== messageId));
   }, []);
 
   const handleSelectMessage = useCallback((messageId: string) => {
@@ -155,6 +185,7 @@ export const ChatView = memo(function ChatView(): JSX.Element {
             onDelete={handleDelete}
             onCopy={handleCopy}
             onSelect={handleSelectMessage}
+            onQuote={handleQuote}
             selectedMessageId={selectedMessageId}
           />
         </div>
@@ -213,6 +244,8 @@ export const ChatView = memo(function ChatView(): JSX.Element {
         <ChatInput
           onSend={handleSend}
           onCancel={handleCancel}
+          references={references}
+          onRemoveReference={handleRemoveReference}
           isStreaming={isStreaming}
           disabled={!currentSessionId}
           placeholder={

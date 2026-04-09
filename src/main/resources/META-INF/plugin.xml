@@ -35,6 +35,8 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.orchestrator.ChatOrchestrator"/>
         <projectService
+            serviceImplementation="com.github.xingzhewa.ccgui.application.context.ContextManager"/>
+        <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.session.SessionManager"/>
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine"/>

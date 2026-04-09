@@ -11,6 +11,29 @@ import com.intellij.openapi.project.Project
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * 日期范围过滤器
+ */
+data class DateRange(
+    val start: Long,
+    val end: Long
+)
+
+/**
+ * 会话搜索过滤器
+ *
+ * @param query 搜索关键词（名称/消息内容）
+ * @param sessionType 会话类型过滤（可选）
+ * @param dateRange 日期范围过滤（可选）
+ * @param tags 标签过滤（可选）
+ */
+data class SearchFilters(
+    val query: String = "",
+    val sessionType: SessionType? = null,
+    val dateRange: DateRange? = null,
+    val tags: List<String>? = null
+)
+
+/**
  * 会话存储
  *
  * 管理会话的持久化存储
@@ -161,15 +184,33 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
     }
 
     /**
-     * 搜索会话
+     * 搜索会话（过滤器版本）
      */
-    fun searchSessions(query: String): List<ChatSession> {
-        if (query.isBlank()) return getAllSessions()
-
-        val lowerQuery = query.lowercase()
+    fun searchSessions(filters: SearchFilters): List<ChatSession> {
         return sessionsCache.values.filter { session ->
-            session.name.lowercase().contains(lowerQuery) ||
-            session.messages.any { it.content.lowercase().contains(lowerQuery) }
+            // 类型过滤
+            if (filters.sessionType != null && session.type != filters.sessionType) {
+                return@filter false
+            }
+
+            // 日期范围过滤
+            if (filters.dateRange != null) {
+                val inRange = session.createdAt >= filters.dateRange.start &&
+                    session.createdAt <= filters.dateRange.end
+                if (!inRange) return@filter false
+            }
+
+            // 关键词过滤（名称 + 消息内容）
+            if (filters.query.isNotBlank()) {
+                val lowerQuery = filters.query.lowercase()
+                val matchesName = session.name.lowercase().contains(lowerQuery)
+                val matchesMessage = session.messages.any {
+                    it.content.lowercase().contains(lowerQuery)
+                }
+                if (!matchesName && !matchesMessage) return@filter false
+            }
+
+            true
         }.sortedByDescending { it.updatedAt }
     }
 

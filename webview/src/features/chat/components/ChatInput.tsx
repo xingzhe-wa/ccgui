@@ -11,7 +11,7 @@ import { SendButton } from './SendButton';
 import { InputToolbar } from './InputToolbar';
 import { useSessionStore } from '@/shared/stores/sessionStore';
 import { javaBridge } from '@/lib/java-bridge';
-import type { ContentPart } from '@/shared/types';
+import type { ContentPart, MessageReference } from '@/shared/types';
 
 /**
  * 将文件读取为 base64 字符串
@@ -31,8 +31,10 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 interface ChatInputProps {
-  onSend: (content: string, attachments?: ContentPart[]) => void;
+  onSend: (content: string, attachments?: ContentPart[], references?: MessageReference[]) => void;
   onCancel?: () => void;
+  onRemoveReference?: (messageId: string) => void;
+  references?: MessageReference[];
   placeholder?: string;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -42,6 +44,8 @@ interface ChatInputProps {
 export const ChatInput = memo<ChatInputProps>(function ChatInput({
   onSend,
   onCancel,
+  onRemoveReference,
+  references = [],
   placeholder = 'Type a message...',
   disabled = false,
   isStreaming = false,
@@ -50,6 +54,10 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [optimizationResult, setOptimizationResult] = useState<{
+    improvements?: string[];
+    confidence?: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
@@ -87,10 +95,11 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       }
     }
 
-    onSend(text.trim(), contentParts.length > 0 ? contentParts : undefined);
+    onSend(text.trim(), contentParts.length > 0 ? contentParts : undefined, references);
     setText('');
     setAttachments([]);
-  }, [text, attachments, onSend]);
+    setOptimizationResult(null);
+  }, [text, attachments, references, onSend]);
 
   const handleFilesSelected = useCallback((files: File[]) => {
     setAttachments((prev) => [...prev, ...files].slice(0, 5));
@@ -107,6 +116,12 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       const result = await javaBridge.optimizePrompt(text);
       if (result?.optimizedPrompt) {
         setText(result.optimizedPrompt);
+        setOptimizationResult({
+          improvements: result.improvements,
+          confidence: result.confidence
+        });
+        // 3秒后自动隐藏
+        setTimeout(() => setOptimizationResult(null), 3000);
       }
     } catch (error) {
       console.error('Failed to optimize prompt:', error);
@@ -152,6 +167,55 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
           disabled={disabled}
         />
       </div>
+
+      {/* Optimization result banner */}
+      {optimizationResult && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-accent/20 border border-accent/30">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-accent">优化完成</span>
+            {optimizationResult.confidence != null && (
+              <span className="text-xs text-muted-foreground">
+                置信度: {Math.round((optimizationResult.confidence) * 100)}%
+              </span>
+            )}
+          </div>
+          {optimizationResult.improvements && optimizationResult.improvements.length > 0 && (
+            <ul className="text-xs text-foreground-muted space-y-0.5">
+              {optimizationResult.improvements.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-1">
+                  <span className="text-accent mt-0.5">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Reference bubbles */}
+      {references.length > 0 && (
+        <div className="mx-4 mb-2 flex flex-wrap gap-2">
+          {references.map((ref) => (
+            <div
+              key={ref.messageId}
+              className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-full bg-muted border border-border text-xs"
+            >
+              <span className="text-muted-foreground shrink-0">@</span>
+              <span className="text-foreground truncate max-w-[150px]">{ref.excerpt}</span>
+              <button
+                type="button"
+                onClick={() => onRemoveReference?.(ref.messageId)}
+                className="shrink-0 p-0.5 rounded hover:bg-background-secondary transition-colors"
+                aria-label="移除引用"
+              >
+                <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Attachment menu */}
       {showAttachMenu && (

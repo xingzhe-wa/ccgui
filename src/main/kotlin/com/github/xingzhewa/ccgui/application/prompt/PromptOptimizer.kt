@@ -1,11 +1,14 @@
 package com.github.xingzhewa.ccgui.application.prompt
 
+import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
+import com.github.xingzhewa.ccgui.adaptation.sdk.SdkOptions
 import com.github.xingzhewa.ccgui.model.message.ChatMessage
 import com.github.xingzhewa.ccgui.model.message.ContentPart
 import com.github.xingzhewa.ccgui.model.session.ChatSession
 import com.github.xingzhewa.ccgui.model.session.SessionContext
 import com.github.xingzhewa.ccgui.util.JsonUtils
 import com.github.xingzhewa.ccgui.util.logger
+import com.google.gson.JsonObject
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
@@ -47,11 +50,19 @@ class PromptOptimizer(private val project: Project) {
 
     /**
      * 优化结果
+     *
+     * @param optimizedPrompt 优化后的提示词
+     * @param addedContext 添加的上下文信息列表
+     * @param truncatedInfo 截断提示信息列表
+     * @param improvements AI 生成的改进点列表（AI-driven optimization 时填充）
+     * @param confidence AI 优化置信度 0.0-1.0（AI-driven optimization 时填充）
      */
     data class OptimizationResult(
         val optimizedPrompt: String,
         val addedContext: List<ContextInfo>,
-        val truncatedInfo: List<String> = emptyList()
+        val truncatedInfo: List<String> = emptyList(),
+        val improvements: List<String> = emptyList(),
+        val confidence: Double = 0.0
     )
 
     /**
@@ -115,10 +126,15 @@ class PromptOptimizer(private val project: Project) {
         // 4. 格式规范化
         val finalPrompt = normalizePrompt(withProjectInfo)
 
+        // 5. AI 驱动的优化（新增 Step 2）
+        val aiOptimizationResult = performAiOptimization(finalPrompt, addedContext)
+
         OptimizationResult(
-            optimizedPrompt = finalPrompt,
+            optimizedPrompt = aiOptimizationResult.first,
             addedContext = addedContext,
-            truncatedInfo = truncatedInfo
+            truncatedInfo = truncatedInfo,
+            improvements = aiOptimizationResult.second,
+            confidence = aiOptimizationResult.third
         )
     }
 
@@ -368,6 +384,120 @@ class PromptOptimizer(private val project: Project) {
     private fun normalizeCodeBlocks(prompt: String): String {
         // 确保代码块有语言标识
         return prompt.replace(Regex("```\n(?![a-z]+)"), "```\n")
+    }
+
+    /**
+     * AI 驱动的提示词优化
+     *
+     * 调用 Claude CLI 生成优化后的提示词、改进点列表和置信度
+     *
+     * @param enrichedPrompt 经过上下文增强后的提示词
+     * @param addedContext 已添加的上下文信息
+     * @return Triple(优化后的提示词, 改进点列表, 置信度)
+     */
+    private suspend fun performAiOptimization(
+        enrichedPrompt: String,
+        addedContext: List<ContextInfo>
+    ): Triple<String, List<String>, Double> = withContext(Dispatchers.IO) {
+        try {
+            val claudeClient = ClaudeCodeClient.getInstance(project)
+
+            // 构建优化请求提示词
+            val optimizationPrompt = buildOptimizationPrompt(enrichedPrompt)
+
+            val result = claudeClient.sendMessage(
+                prompt = optimizationPrompt,
+                options = SdkOptions(
+                    maxTurns = 1,
+                    allowedTools = emptyList()
+                )
+            )
+
+            result.getOrNull()?.let { sdkResult ->
+                val responseText = sdkResult.result ?: ""
+                if (responseText.isNotEmpty()) {
+                    parseOptimizationResponse(responseText)
+                } else {
+                    Triple(enrichedPrompt, emptyList(), 0.0)
+                }
+            } ?: run {
+                // CLI 调用失败时，返回原始提示词，空改进点
+                log.warn("AI optimization failed, returning enriched prompt")
+                Triple(enrichedPrompt, emptyList(), 0.0)
+            }
+        } catch (e: Exception) {
+            log.warn("AI optimization error: ${e.message}, returning enriched prompt")
+            Triple(enrichedPrompt, emptyList(), 0.0)
+        }
+    }
+
+    /**
+     * 构建优化请求提示词
+     */
+    private fun buildOptimizationPrompt(enrichedPrompt: String): String {
+        return """
+请你优化以下提示词，使其更清晰、具体、结构化。
+
+请以 JSON 格式返回优化结果：
+{
+    "optimizedPrompt": "优化后的提示词（保持原意但更清晰）",
+    "improvements": ["改进点1", "改进点2", "改进点3"],
+    "confidence": 0.95
+}
+
+原始提示词：
+$enrichedPrompt
+
+要求：
+- optimizedPrompt：保持原意，改进表达清晰度和结构化程度
+- improvements：列出 2-5 个关键改进点，简短描述
+- confidence：0.0-1.0，表示优化置信度
+        """.trimIndent()
+    }
+
+    /**
+     * 解析优化响应
+     */
+    private fun parseOptimizationResponse(responseText: String): Triple<String, List<String>, Double> {
+        return try {
+            // 尝试从响应中提取 JSON
+            val jsonText = extractJson(responseText)
+            val json = JsonUtils.fromJson(jsonText, JsonObject::class.java)
+                ?: throw IllegalStateException("Failed to parse JSON")
+
+            val optimizedPrompt = json.get("optimizedPrompt")?.asString ?: ""
+            val improvements = json.getAsJsonArray("improvements")?.map { it.asString } ?: emptyList()
+            val confidence = json.get("confidence")?.asDouble ?: 0.0
+
+            Triple(optimizedPrompt, improvements, confidence)
+        } catch (e: Exception) {
+            log.warn("Failed to parse optimization response: ${e.message}")
+            // 解析失败时尝试直接返回响应文本作为优化后的提示词
+            val cleaned = responseText.trim().take(2000)
+            Triple(cleaned, emptyList(), 0.0)
+        }
+    }
+
+    /**
+     * 从响应文本中提取 JSON
+     */
+    private fun extractJson(text: String): String {
+        // 尝试找 JSON 代码块
+        val jsonBlockRegex = """```json\s*([\s\S]*?)\s*```""".toRegex()
+        val blockMatch = jsonBlockRegex.find(text)
+        if (blockMatch != null) {
+            return blockMatch.groupValues[1].trim()
+        }
+
+        // 尝试找普通代码块
+        val codeBlockRegex = """```\s*([\s\S]*?)\s*```""".toRegex()
+        val codeMatch = codeBlockRegex.find(text)
+        if (codeMatch != null) {
+            return codeMatch.groupValues[1].trim()
+        }
+
+        // 尝试直接解析整个文本
+        return text.trim()
     }
 
     companion object {

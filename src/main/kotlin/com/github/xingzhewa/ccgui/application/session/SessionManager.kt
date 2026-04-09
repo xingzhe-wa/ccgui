@@ -1,9 +1,11 @@
 package com.github.xingzhewa.ccgui.application.session
 
+import com.github.xingzhewa.ccgui.application.context.ContextManager
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionCreatedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionDeletedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionSwitchedEvent
+import com.github.xingzhewa.ccgui.infrastructure.storage.SearchFilters
 import com.github.xingzhewa.ccgui.infrastructure.storage.SessionStorage
 import com.github.xingzhewa.ccgui.model.message.ChatMessage
 import com.github.xingzhewa.ccgui.model.session.ChatSession
@@ -26,6 +28,7 @@ class SessionManager(private val project: Project) : Disposable {
 
     private val log = logger<SessionManager>()
     private val sessionStorage: SessionStorage by lazy { SessionStorage.getInstance(project) }
+    private val contextManager: ContextManager by lazy { ContextManager.getInstance(project) }
 
     /** 所有会话 */
     private val _sessions = MutableStateFlow<List<ChatSession>>(emptyList())
@@ -114,6 +117,7 @@ class SessionManager(private val project: Project) : Disposable {
      */
     fun deleteSession(sessionId: String) {
         sessionStorage.deleteSession(sessionId)
+        contextManager.removeSession(sessionId)
 
         if (_currentSessionId.value == sessionId) {
             // 切换到另一个会话
@@ -154,14 +158,28 @@ class SessionManager(private val project: Project) : Disposable {
     fun clearSession(sessionId: String) {
         val session = sessionStorage.getSession(sessionId) ?: return
         sessionStorage.updateSession(session.withClearedMessages())
+        contextManager.resetSession(sessionId)
         _sessions.value = sessionStorage.getAllSessions()
     }
 
     /**
-     * 搜索会话
+     * 搜索会话（支持过滤器）
+     *
+     * @param query 搜索关键词（向后兼容）
+     * @param filters 搜索过滤器（可选）
      */
-    fun searchSessions(query: String): List<ChatSession> {
-        return sessionStorage.searchSessions(query)
+    fun searchSessions(query: String, filters: SearchFilters? = null): List<ChatSession> {
+        val effectiveFilters = filters?.copy(query = query) ?: SearchFilters(query = query)
+        return sessionStorage.searchSessions(effectiveFilters)
+    }
+
+    /**
+     * 搜索会话（仅过滤器）
+     *
+     * @param filters 搜索过滤器
+     */
+    fun searchSessions(filters: SearchFilters): List<ChatSession> {
+        return sessionStorage.searchSessions(filters)
     }
 
     /**
