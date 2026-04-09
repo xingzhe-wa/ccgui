@@ -336,16 +336,21 @@ const mockBackend: JavaBackendAPI = {
     const chunks = ['你好', '！这是', ' mock ', '流式输出', '的演示', '文本。'];
     const messageId = 'stream-' + Date.now();
     let i = 0;
-    const interval = setInterval(() => {
-      if (i < chunks.length) {
-        // Dev 模式：直接 emit 到 React eventBus（production 走 window.ccEvents → javaBridge）
-        eventBus.emit(Events.STREAMING_CHUNK, { messageId, chunk: chunks[i] });
-        i++;
-      } else {
-        eventBus.emit(Events.STREAMING_COMPLETE, { messageId });
-        clearInterval(interval);
-      }
-    }, 200);
+
+    // 返回 Promise，模拟异步完成
+    return new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (i < chunks.length) {
+          // Dev 模式：直接 emit 到 React eventBus（production 走 window.ccEvents → javaBridge）
+          eventBus.emit(Events.STREAMING_CHUNK, { messageId, chunk: chunks[i] });
+          i++;
+        } else {
+          eventBus.emit(Events.STREAMING_COMPLETE, { messageId });
+          clearInterval(interval);
+          resolve();
+        }
+      }, 200);
+    });
   },
 
   cancelStreaming: () => console.log('[MockBackend] cancelStreaming'),
@@ -368,7 +373,6 @@ const mockBackend: JavaBackendAPI = {
           break;
         }
         case 'streamMessage': {
-          // streamMessage 不发 response 事件，流式数据通过 eventBus (production) 或直接 emit (dev) 发送
           const chunks = ['你', '好', '！这', '是', ' m', 'oc', 'k ', '流', '式', '。'];
           const messageId = 'stream-' + Date.now();
           let i = 0;
@@ -379,6 +383,11 @@ const mockBackend: JavaBackendAPI = {
             } else {
               eventBus.emit(Events.STREAMING_COMPLETE, { messageId });
               clearInterval(interval);
+              // 模拟流结束后发送 response 事件
+              mockEvents.emit('response', {
+                queryId,
+                result: { content: '[stream complete]', tokensUsed: chunks.join('').length, model: 'mock' }
+              });
             }
           }, 150);
           break;

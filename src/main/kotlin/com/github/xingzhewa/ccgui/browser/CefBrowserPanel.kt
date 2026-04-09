@@ -5,6 +5,7 @@ import com.github.xingzhewa.ccgui.application.agent.AgentExecutor
 import com.github.xingzhewa.ccgui.application.config.ConfigManager
 import com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine
 import com.github.xingzhewa.ccgui.application.mcp.McpServerManager
+import com.github.xingzhewa.ccgui.application.multimodal.MultimodalInputHandler
 import com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer
 import com.github.xingzhewa.ccgui.application.session.SessionManager
 import com.github.xingzhewa.ccgui.application.skill.SkillExecutor
@@ -81,6 +82,9 @@ class CefBrowserPanel(private val project: Project) : Disposable {
 
     /** PromptOptimizer */
     private val promptOptimizer: PromptOptimizer by lazy { PromptOptimizer.getInstance(project) }
+
+    /** MultimodalInputHandler */
+    private val multimodalInputHandler: MultimodalInputHandler by lazy { MultimodalInputHandler.getInstance(project) }
 
     /** 连接状态 */
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -385,9 +389,66 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     // ---- Multimodal ----
 
     private fun handleSendMultimodalMessage(queryId: Int, params: com.google.gson.JsonElement?): Any? {
-        // TODO: 实现多模态消息处理（图片/文件附件）
-        log.warn("handleSendMultimodalMessage not fully implemented")
-        return mapOf("error" to "Multimodal messaging not yet implemented")
+        val jsonParams = params?.asJsonObject ?: return null
+        val messageObj = jsonParams.get("message")?.asJsonObject ?: return null
+        val sessionId = messageObj.get("sessionId")?.asString ?: ""
+        val content = messageObj.get("content")?.asString ?: ""
+        val attachments = messageObj.get("attachments")?.asJsonArray
+
+        if (attachments == null || attachments.size() == 0) {
+            // No attachments, delegate to regular send
+            return handleSendMessage(queryId, params)
+        }
+
+        // Build text representation of attachments appended to content
+        // Claude Code CLI doesn't natively support inline images,
+        // so we format attachments as text references in the prompt
+        val attachmentText = buildString {
+            append("\n\n[Attachments]\n")
+            for (i in 0 until attachments.size()) {
+                val attachment = attachments.get(i).asJsonObject
+                when (attachment.get("type")?.asString) {
+                    "image" -> {
+                        val mimeType = attachment.get("mimeType")?.asString ?: "image/png"
+                        val data = attachment.get("data")?.asString ?: ""
+                        val sizeKB = data.length / 1024
+                        append("[Image #$i: data:$mimeType;base64,$data]\n")
+                        append("<!-- Image $i (${sizeKB}KB) - base64 encoded -->\n")
+                    }
+                    "file" -> {
+                        val name = attachment.get("name")?.asString ?: "file"
+                        val fileContent = attachment.get("content")?.asString ?: ""
+                        append("[$name]\n$fileContent\n[/$name]\n")
+                    }
+                }
+            }
+            append("[/Attachments]\n")
+        }
+
+        val fullContent = content + attachmentText
+
+        // Send via streamMessage (same as regular message but with attachment text)
+        bridgeManager.streamMessage(
+            message = fullContent,
+            sessionId = sessionId,
+            callback = object : com.github.xingzhewa.ccgui.bridge.StreamCallback {
+                override fun onLineReceived(line: String) {
+                    sendToJavaScript("streaming:chunk", mapOf("chunk" to line))
+                }
+
+                override fun onStreamComplete(messages: List<String>) {
+                    sendToJavaScript("streaming:complete", mapOf("messages" to messages))
+                }
+
+                override fun onStreamError(error: String) {
+                    sendToJavaScript("streaming:error", mapOf("error" to error))
+                }
+            },
+            onResponse = { result, error ->
+                sendResponseToJs("sendMultimodalMessage", queryId, result, error)
+            }
+        )
+        return null
     }
 
     // ---- Config ----

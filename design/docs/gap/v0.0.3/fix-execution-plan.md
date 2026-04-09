@@ -13,7 +13,9 @@
 | Phase | Task | 状态 | 完成日期 |
 |-------|------|------|---------|
 | （历史） | Phase 1/2/3 全部完成 | ✅ | 2026-04-10 |
-| 新增 | v0.0.3 Review 发现的新 Gap | 规划中 | — |
+| 新增 | v0.0.3 Review 发现的新 Gap | ✅ 全部完成 | 2026-04-10 |
+| G1 | handleSendMultimodalMessage 实现 | ✅ 已完成 | 2026-04-10 |
+| G2 | streamMessage 响应处理修复 | ✅ 已完成 | 2026-04-10 |
 
 ---
 
@@ -64,10 +66,10 @@
 
 ## 3. Sprint 排期建议
 
-### Sprint 12（2.5 天）
+### Sprint 12（2.5 天）✅ 已完成
 
-- Task G1: MultimodalMessage 实现
-- Task G2: streamMessage 响应处理修复
+- Task G1: MultimodalMessage 实现 ✅
+- Task G2: streamMessage 响应处理修复 ✅
 
 ---
 

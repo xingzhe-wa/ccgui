@@ -1,8 +1,9 @@
 # PRD Gap Analysis Report — v0.0.3
 
-**文档版本**: 1.0
+**文档版本**: 1.1
 **基于**: PRD-v3.0.md
 **分析日期**: 2026-04-10
+**更新日期**: 2026-04-10 (G1/G2 修复)
 **覆盖版本**: v0.0.3 (继 bea2c3a)
 **分析维度**: 需求规格 vs 代码实现吻合度 + 接口一致性审查
 
@@ -18,9 +19,9 @@
 | 3.4 模型配置系统 | 部分实现 | ~50% | 无（架构决策） |
 | 3.5 Claude Code生态 | 大部分实现 | ~95% | 无 |
 
-**v0.0.3 总体功能覆盖率**: ~85%
+**v0.0.3 总体功能覆盖率**: ~88%
 
-> v0.0.3 完成了 v0.0.2 阶段所有 gap 的修复（Phase 1/2/3 + ContextManager），覆盖率从 ~65% 提升至 ~85%。
+> v0.0.3 完成了 v0.0.2 阶段所有 gap 的修复（Phase 1/2/3 + ContextManager），覆盖率从 ~65% 提升至 ~88%。
 
 ---
 
@@ -98,42 +99,48 @@
 
 ### 发现的问题
 
-| 优先级 | 接口 | 问题描述 | 影响 |
+| 优先级 | 接口 | 问题描述 | 状态 |
 |--------|------|---------|------|
-| **P1** | `handleSendMultimodalMessage` | 返回 error，功能完全不可用 | 附件发送失败 |
-| **P2** | `javaBridge.streamMessage` | 前端返回 void（fire-and-forget），后端会调用 `onResponse`，响应被忽略 | 未来如果前端依赖 response 会出问题 |
-| **P2** | `javaBridge.executeSkill` | 前端传 `(skillId, context)` 位置参数，后端期望 `{skillId, context}` JSON 对象 | Skill 执行参数传递错误 |
+| **P1** | `handleSendMultimodalMessage` | 返回 error，功能完全不可用 | ✅ 已修复 (2026-04-10) |
+| **P2** | `javaBridge.streamMessage` | 前端返回 void（fire-and-forget），后端会调用 `onResponse`，响应被忽略 | ✅ 已修复 (2026-04-10) |
+| ~~P2~~ | `javaBridge.executeSkill` | ~~前端传 `(skillId, context)` 位置参数，后端期望 `{skillId, context}` JSON 对象~~ | ❌ 误报，实际参数格式正确 |
 
 ### 技术根因分析
 
-**P1 - MultimodalMessage 未实现**:
+**G1 - MultimodalMessage 已修复** (2026-04-10):
 ```kotlin
-// CefBrowserPanel.kt:387-391
+// CefBrowserPanel.kt:387-445
 private fun handleSendMultimodalMessage(queryId: Int, params: com.google.gson.JsonElement?): Any? {
-    // TODO: 实现多模态消息处理（图片/文件附件）
-    log.warn("handleSendMultimodalMessage not fully implemented")
-    return mapOf("error" to "Multimodal messaging not yet implemented")
+    // 解析 sessionId, content, attachments
+    // 将图片格式化为 [Image: data:mimeType;base64,...] 文本块
+    // 将文件格式化为 [filename]content[/filename] 文本块
+    // 通过 bridgeManager.streamMessage 发送（附件作为文本追加到 prompt）
 }
 ```
-前端 `ChatView.tsx:98-104` 在有附件时调用 `javaBridge.sendMultimodalMessage()`，会收到 error 响应。
+实现方式：Claude Code CLI 不支持内联图片，附件被格式化为文本引用追加到消息内容中，确保消息能发送。
 
-**P2 - streamMessage 响应丢失**:
+**G2 - streamMessage 响应处理已修复** (2026-04-10):
 ```typescript
-// java-bridge.ts:108-111 — 前端
-streamMessage(message: string): void {
+// java-bridge.ts:108-133
+async streamMessage(message: string): Promise<any> {
     const queryId = ++this.queryId;
-    (window.ccBackend as JavaBackendAPI).send({ queryId, action: 'streamMessage', params: { message } });
-    // 无 Promise 返回，onResponse 被丢弃
+    return new Promise<any>((resolve, reject) => {
+        // 设置超时（30秒）
+        // 存储 pending 请求
+        // 调用 ccBackend.send()
+        // onResponse 到来时 resolve/reject
+    });
 }
 ```
-后端 `handleStreamMessage` 会调用 `onResponse`（`CefBrowserPanel.kt:272`），但前端没有接收。
+`streamMessage` 现在返回 Promise，可等待响应或错误。mock-bridge.ts 也同步更新。
 
-**P2 - executeSkill 参数格式不匹配**:
+**executeSkill 参数格式经验证正确**：
 ```typescript
-// java-bridge.ts:170-172 — 前端（位置参数）
-async executeSkill(skillId: string, context: any): Promise<any> {
-    return this.invoke('executeSkill', { skillId, context });  // { skillId, context } ✓
-}
+// java-bridge.ts - 前端传 { skillId, context } 对象
+return this.invoke('executeSkill', { skillId, context });
+// 后端 CefBrowserPanel - 正确解析 jsonObj.get("skillId")
+```
+此条为误报，无需修复。
 ```
 后端 `handleExecuteSkill` 正确使用 `jsonObj.get("skillId")`，参数格式匹配。**此条经验证实际正确** — 需更正为非 Gap。
 

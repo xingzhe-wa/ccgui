@@ -29,7 +29,7 @@ export interface JavaBackendAPI {
   /**
    * 流式发送消息
    */
-  streamMessage(message: string): void;
+  streamMessage(message: string): Promise<any>;
 
   /**
    * 取消流式输出

@@ -105,9 +105,41 @@ class JavaBridge {
     return this.invoke('sendMultimodalMessage', { message });
   }
 
-  streamMessage(message: string): void {
+  streamMessage(message: string): Promise<any> {
     const queryId = ++this.queryId;
-    (window.ccBackend as JavaBackendAPI).send({ queryId, action: 'streamMessage', params: { message } });
+
+    return new Promise<any>((resolve, reject) => {
+      // 设置超时（30秒）
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(queryId);
+        reject(new Error(`streamMessage timeout`));
+      }, 30000);
+
+      // 存储pending请求
+      this.pendingRequests.set(queryId, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+
+      // 调用Java（通过JBCefJSQuery注入的send方法）
+      try {
+        (window.ccBackend as JavaBackendAPI).send({
+          queryId,
+          action: 'streamMessage',
+          params: { message }
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(queryId);
+        reject(error);
+      }
+    });
   }
 
   cancelStreaming(sessionId: string): void {
