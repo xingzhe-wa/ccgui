@@ -58,9 +58,9 @@
 
 | Task | 工作量 |
 |------|--------|
-| G1: MultimodalMessage 实现 | 2 天 |
-| G2: streamMessage 响应处理 | 0.5 天 |
-| **总计** | **2.5 天** |
+| G1: MultimodalMessage 实现 | ✅ 已完成 |
+| G2: streamMessage 响应处理 | ✅ 已完成 |
+| G3: 响应式布局断点补全（P3） | 0.5 天 |
 
 ---
 
@@ -73,4 +73,25 @@
 
 ---
 
-*计划版本：v1.0 | 编制日期：2026-04-10 | 基于：PRD-Gap-Analysis-v0.0.3.md*
+## 4. v0.0.4 新增 Gap（P3）
+
+### Task G3: 响应式布局断点补全（P3）
+
+**问题**: 当前实现 `<768px` 隐藏 `MessageDetail`，`>=768px` 显示固定 `w-80`。PRD 规定三断点（`<800px` 单列 / `800-1200px` 60:40 分栏 / `>1200px` 50:50 分栏）。
+
+**现状**: `ChatView.tsx` 中 `ResizeObserver` 只监听宽度，`containerWidth >= 768` 时显示 `MessageDetail w-80`，无动态比例调整。
+
+**涉及文件**:
+- `webview/src/main/pages/ChatView.tsx` — 布局 class 动态化
+
+**验收标准**:
+- [ ] <800px：单列布局，MessageDetail 隐藏
+- [ ] 800-1200px：左右分栏 60%:40%
+- [ ] >1200px：左右分栏 50%:50%
+- [ ] `npm run build` 成功
+
+**工作量**: 0.5 人天
+
+---
+
+*计划版本：v1.0 | 编制日期：2026-04-10 | 更新日期：2026-04-10 | 基于：PRD-Gap-Analysis-v0.0.3.md*

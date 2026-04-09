@@ -19,9 +19,9 @@
 | 3.4 模型配置系统 | 部分实现 | ~50% | 无（架构决策） |
 | 3.5 Claude Code生态 | 大部分实现 | ~95% | 无 |
 
-**v0.0.3 总体功能覆盖率**: ~88%
+**v0.0.3 总体功能覆盖率**: ~90%
 
-> v0.0.3 完成了 v0.0.2 阶段所有 gap 的修复（Phase 1/2/3 + ContextManager），覆盖率从 ~65% 提升至 ~88%。
+> v0.0.3 完成了 v0.0.2 阶段所有 gap 的修复（Phase 1/2/3 + ContextManager + G1 + G2），覆盖率从 ~65% 提升至 ~90%。
 
 ---
 
@@ -112,12 +112,12 @@
 // CefBrowserPanel.kt:387-445
 private fun handleSendMultimodalMessage(queryId: Int, params: com.google.gson.JsonElement?): Any? {
     // 解析 sessionId, content, attachments
-    // 将图片格式化为 [Image: data:mimeType;base64,...] 文本块
-    // 将文件格式化为 [filename]content[/filename] 文本块
-    // 通过 bridgeManager.streamMessage 发送（附件作为文本追加到 prompt）
+    // 图片格式化为: [Image #N: data:mimeType;base64,...]
+    // 文件格式化为: [filename]content[/filename]
+    // 附件文本追加到 prompt 末尾，通过 bridgeManager.streamMessage 发送
 }
 ```
-实现方式：Claude Code CLI 不支持内联图片，附件被格式化为文本引用追加到消息内容中，确保消息能发送。
+实现方式：Claude Code CLI 不支持内联图片，附件被格式化为文本引用追加到消息内容中发送。
 
 **G2 - streamMessage 响应处理已修复** (2026-04-10):
 ```typescript
@@ -150,8 +150,9 @@ return this.invoke('executeSkill', { skillId, context });
 
 | 优先级 | 问题 | 模块 | 影响 | 修复工作量 |
 |--------|------|------|------|-----------|
-| **P1** | `handleSendMultimodalMessage` 返回 error | 3.2 | 附件发送不可用 | 中（需实现 base64 图片处理 + CLI 多模态调用） |
-| **P2** | `streamMessage` 前端不处理 `onResponse` | 3.3 | 流式响应回调丢失 | 低（前端改用 Promise） |
+| **P1** | `handleSendMultimodalMessage` 返回 error | 3.2 | 附件发送不可用 | ✅ 已修复 |
+| **P2** | `streamMessage` 前端不处理 `onResponse` | 3.3 | 流式响应回调丢失 | ✅ 已修复 |
+| **P3** | 响应式布局仅 2 断点（<768px / >=768px），PRD 规定 3 断点（<800 / 800-1200 / >1200）且 50:50 分栏 | 3.1 | 窄屏体验简化 | 低（仅为 CSS 调整，不影响功能） |
 | **P3** | MultiProviderAdapter 完全缺失 | 3.4 | 无法对接外部 API | 高（架构级） |
 | **P3** | ModelSwitcher 状态栏 Widget 缺失 | 3.4 | 无法快捷切换模型 | 中 |
 
@@ -169,11 +170,12 @@ return this.invoke('executeSkill', { skillId, context });
 
 | 文件 | 职责 | 状态 |
 |------|------|------|
-| `CefBrowserPanel.kt:387-391` | handleSendMultimodalMessage | ❌ 未实现 |
+| `CefBrowserPanel.kt:387-445` | handleSendMultimodalMessage | ✅ 已修复：附件格式化为文本追加到 prompt |
 | `CefBrowserPanel.kt:453-469` | handleOptimizePrompt | ✅ AI 优化 + improvements + confidence |
-| `java-bridge.ts:108-111` | streamMessage | ⚠️ void，响应丢失 |
+| `java-bridge.ts:108-133` | streamMessage | ✅ 已修复：返回 Promise，正确处理 onResponse |
 | `ContextManager.kt` | 上下文长度追踪 + /compact | ✅ 新增 |
+| `webview/src/main/pages/ChatView.tsx` | 响应式布局 | ⚠️ 仅 2 断点（PRD 规定 3 断点） |
 
 ---
 
-*报告版本：v1.0 | 编制日期：2026-04-10 | 基于：PRD-v3.0.md & codebase bea2c3a*
+*报告版本：v1.2 | 编制日期：2026-04-10 | 更新日期：2026-04-10 | 基于：PRD-v3.0.md & codebase bea2c3a*
