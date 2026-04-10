@@ -152,7 +152,7 @@ return this.invoke('executeSkill', { skillId, context });
 |--------|------|------|------|-----------|
 | **P1** | `handleSendMultimodalMessage` 返回 error | 3.2 | 附件发送不可用 | ✅ 已修复 |
 | **P2** | `streamMessage` 前端不处理 `onResponse` | 3.3 | 流式响应回调丢失 | ✅ 已修复 |
-| **P3** | 响应式布局仅 2 断点（<768px / >=768px），PRD 规定 3 断点（<800 / 800-1200 / >1200）且 50:50 分栏 | 3.1 | 窄屏体验简化 | 低（仅为 CSS 调整，不影响功能） |
+| ~~P3~~ | ~~响应式布局仅 2 断点~~ | ~~G3 为误报 — 代码已实现 3 断点（<800 / 800-1200 / >1200）且 50:50 分栏，详见 ChatView.tsx:234~~ | ✅ 已验证正确 |
 | **P3** | MultiProviderAdapter 完全缺失 | 3.4 | 无法对接外部 API | 高（架构级） |
 | **P3** | ModelSwitcher 状态栏 Widget 缺失 | 3.4 | 无法快捷切换模型 | 中 |
 
@@ -174,7 +174,7 @@ return this.invoke('executeSkill', { skillId, context });
 | `CefBrowserPanel.kt:453-469` | handleOptimizePrompt | ✅ AI 优化 + improvements + confidence |
 | `java-bridge.ts:108-133` | streamMessage | ✅ 已修复：返回 Promise，正确处理 onResponse |
 | `ContextManager.kt` | 上下文长度追踪 + /compact | ✅ 新增 |
-| `webview/src/main/pages/ChatView.tsx` | 响应式布局 | ⚠️ 仅 2 断点（PRD 规定 3 断点） |
+| `webview/src/main/pages/ChatView.tsx:234` | 响应式布局 | ✅ 已实现 3 断点（<800 / 800-1200 / >1200，50:50 分栏） |
 
 ---
 
