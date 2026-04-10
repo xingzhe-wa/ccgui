@@ -8,3 +8,5 @@ build
 /webview/node_modules
 /webview/dist
 src/main/resources/webview/dist
+/daemon/node_modules
+/daemon/dist
