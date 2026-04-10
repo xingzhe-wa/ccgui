@@ -17,6 +17,7 @@
 | 05 | Skill 与 Agent 执行 | 自定义 Skill/Agent 的创建、执行、异步结果回调 | `SkillExecutor.kt`, `AgentsManager.kt`, `skillsStore.ts`, `agentsStore.ts` |
 | 06 | MCP Server 管理 | MCP Server 生命周期管理、启动/停止/测试、Scope 权限 | `McpServerManager.kt`, `mcpStore.ts`, `McpServerManager.tsx` |
 | 07 | 交互式问题与多模态输入 | InteractiveQuestion 弹窗、图片/文件附件、Prompt 优化 | `InteractiveRequestEngine.kt`, `MultimodalInputHandler.kt`, `questionStore.ts`, `useStreaming.ts` |
+| 08 | [PRD-SDK 合规开发指南](./08-prd-sdk-compliance.md) | PRD-v3.1 规格遵循、SDK 集成规范、bug 修复时新盲点记录 | `PRD-v3.1.md`, `claude-sdk-integration-guide.md`, `00-development-pitfalls-and-lessons.md` |
 
 ## 如何使用
 
