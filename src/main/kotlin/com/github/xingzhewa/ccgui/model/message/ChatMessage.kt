@@ -1,5 +1,6 @@
 package com.github.xingzhewa.ccgui.model.message
 
+import com.github.xingzhewa.ccgui.infrastructure.storage.MessageContentStorage
 import com.github.xingzhewa.ccgui.util.IdGenerator
 import com.google.gson.JsonObject
 
@@ -96,6 +97,11 @@ data class ChatMessage(
      * 是否发送失败
      */
     val isFailed: Boolean get() = status == MessageStatus.FAILED
+
+    /**
+     * 内容是否为文件引用
+     */
+    val isFileReference: Boolean get() = MessageContentStorage.isFileReference(content)
 
     companion object {
         /**

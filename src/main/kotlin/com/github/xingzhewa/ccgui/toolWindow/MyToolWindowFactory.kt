@@ -4,6 +4,7 @@ import com.github.xingzhewa.ccgui.browser.CefBrowserPanel
 import com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine
 import com.github.xingzhewa.ccgui.config.CCGuiConfig
 import com.github.xingzhewa.ccgui.util.logger
+import com.github.xingzhewa.ccgui.MyBundle
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
@@ -35,10 +36,11 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val anchor = parseAnchor(config.toolWindowAnchor)
             toolWindow.setAnchor(anchor, null)
 
-            // 设置工具窗口标题为 CC Assistant
-            toolWindow.setTitle("CC Assistant")
+            // 设置工具窗口标题
+            val toolWindowTitle = MyBundle.message("tool.window.title")
+            toolWindow.setTitle(toolWindowTitle)
             // 设置左侧悬浮图标悬停时显示的名称
-            toolWindow.setStripeTitle("CC Assistant")
+            toolWindow.setStripeTitle(toolWindowTitle)
 
             // 创建 CefBrowserPanel
             cefPanel = CefBrowserPanel(project)
@@ -66,7 +68,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             log.error("Failed to create tool window content", e)
             // 降级处理：显示错误面板
             val panel = JPanel()
-            panel.add(javax.swing.JLabel("CC Assistant 初始化失败: ${e.message}"))
+            panel.add(javax.swing.JLabel("${MyBundle.message("tool.window.init.failed")}: ${e.message}"))
             val content = ContentFactory.getInstance().createContent(panel, "", false)
             toolWindow.contentManager.addContent(content)
         }
@@ -118,7 +120,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val classLoader = this::class.java.classLoader
             val distUrl = classLoader.getResource("webview/dist/index.html")
             if (distUrl == null) {
-                log.error("Frontend resource 'webview/dist/index.html' not found in classpath. Run 'npm run build' in webview directory first.")
+                log.error(MyBundle.message("frontend.resource.not.found"))
                 return
             }
             log.info("Found frontend resource at: $distUrl")
@@ -127,13 +129,13 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             // jar:file:/path/to/plugin.jar!/webview/dist/index.html
             val jarUrlStr = distUrl.toString()
             if (!jarUrlStr.startsWith("jar:file:")) {
-                log.error("Unexpected resource URL scheme: $jarUrlStr. Expected jar:file: URL from classpath resource.")
+                log.error("${MyBundle.message("frontend.url.scheme.unexpected")}: $jarUrlStr")
                 return
             }
 
             val bangIndex = jarUrlStr.indexOf("!/")
             if (bangIndex == -1) {
-                log.error("Cannot parse jar URL (missing !/): $jarUrlStr")
+                log.error("${MyBundle.message("frontend.url.parse.failed")}: $jarUrlStr")
                 return
             }
 
@@ -142,11 +144,11 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val jarPath = URLDecoder.decode(encodedJarPath, "UTF-8")
             val innerBasePath = jarUrlStr.substring(bangIndex + 2) // e.g., "webview/dist/index.html"
             val webappRootDir = innerBasePath.substringBeforeLast("/") // "webview"
-            log.info("Extracting webview from JAR: $jarPath, inner path: $webappRootDir")
+            log.info("${MyBundle.message("frontend.extracting")}: $jarPath, inner path: $webappRootDir")
 
             // 3. 使用 IntelliJ FileUtil 创建临时目录
             val tempDir = FileUtil.createTempDirectory("ccgui-webview", "", true)
-            log.info("Extracting webview to temp directory: ${tempDir.absolutePath}")
+            log.info("${MyBundle.message("frontend.extract.to.temp")}: ${tempDir.absolutePath}")
 
             // 4. 读取 JAR 并提取 webview 目录下的所有文件
             val jarFile = java.util.jar.JarFile(jarPath)
@@ -175,13 +177,13 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val indexFile = File(tempDir, "index.html")
             if (indexFile.exists()) {
                 val fileUrl = indexFile.toURI().toURL().toString()
-                log.info("Loading frontend from file URL: $fileUrl")
+                log.info("${MyBundle.message("frontend.loading.from.file")}: $fileUrl")
                 cefPanel?.loadHtmlPage(fileUrl)
             } else {
                 log.error("index.html not found after extraction: ${indexFile.absolutePath}")
             }
         } catch (e: Exception) {
-            log.error("Failed to load production frontend", e)
+            log.error(MyBundle.message("frontend.load.failed"), e)
         }
     }
 

@@ -31,7 +31,9 @@ class ConfigStorage(private val project: Project) : PersistentStateComponent<Con
         var lastThemeId: String = "jetbrains-dark",
         var version: Int = 1,
         /** 配置作用域: GLOBAL 或 PROJECT */
-        var scope: String = "PROJECT"
+        var scope: String = "PROJECT",
+        /** 额外配置数据（用于存储非结构化配置） */
+        var extraData: String = "{}"
     )
 
     private var state = State()
@@ -168,6 +170,73 @@ class ConfigStorage(private val project: Project) : PersistentStateComponent<Con
         saveAppConfig(_appConfig!!)
         saveThemes(_themes!!)
         saveCustomThemes(_customThemes!!)
+    }
+
+    // ==================== 通用键值存储 ====================
+
+    /** 额外数据缓存 */
+    private var extraDataCache: MutableMap<String, String>? = null
+
+    /**
+     * 获取额外数据 Map
+     */
+    private fun getExtraDataMap(): MutableMap<String, String> {
+        if (extraDataCache == null) {
+            extraDataCache = try {
+                val jsonObject = JsonUtils.parseObject(state.extraData) ?: JsonObject()
+                val map = mutableMapOf<String, String>()
+                jsonObject.keySet().forEach { key ->
+                    map[key] = jsonObject.get(key)?.asString ?: ""
+                }
+                map
+            } catch (e: Exception) {
+                logger.warn("Failed to parse extra data: ${e.message}")
+                mutableMapOf()
+            }
+        }
+        return extraDataCache!!
+    }
+
+    /**
+     * 保存额外数据到 State
+     */
+    private fun saveExtraData() {
+        val jsonObject = JsonObject()
+        getExtraDataMap().forEach { (key, value) ->
+            jsonObject.addProperty(key, value)
+        }
+        state.extraData = JsonUtils.toJson(jsonObject)
+    }
+
+    /**
+     * 获取配置值
+     *
+     * @param key 配置键
+     * @return 配置值，不存在则返回 null
+     */
+    fun getState(key: String): String? {
+        return getExtraDataMap()[key]
+    }
+
+    /**
+     * 设置配置值
+     *
+     * @param key 配置键
+     * @param value 配置值
+     */
+    fun setState(key: String, value: String) {
+        getExtraDataMap()[key] = value
+        saveExtraData()
+    }
+
+    /**
+     * 删除配置值
+     *
+     * @param key 配置键
+     */
+    fun removeState(key: String) {
+        getExtraDataMap().remove(key)
+        saveExtraData()
     }
 
     companion object {

@@ -448,10 +448,94 @@ class McpServerManager(private val project: Project) : Disposable {
 
     /**
      * 解析能力列表
+     *
+     * MCP 服务器输出格式（JSON-RPC）：
+     * {
+     *   "result": {
+     *     "capabilities": {
+     *       "resources": {},
+     *       "tools": {},
+     *       "prompts": {}
+     *     },
+     *     "serverInfo": {
+     *       "name": "server-name",
+     *       "version": "1.0.0"
+     *     }
+     *   }
+     * }
+     *
+     * 或者简单格式（一行一个能力）：
+     * resource:fs:read
+     * tool:execute_command
+     *
+     * @param output 服务器输出
+     * @return 能力列表
      */
     private fun parseCapabilities(output: String): List<String> {
-        // TODO: 实现实际的解析逻辑
-        return emptyList()
+        if (output.isBlank()) return emptyList()
+
+        return try {
+            // 尝试解析 JSON-RPC 格式
+            val jsonObject = JsonUtils.gson.fromJson(output, com.google.gson.JsonObject::class.java)
+            val result = jsonObject.getAsJsonObject("result")
+            if (result != null) {
+                val capabilities = result.getAsJsonObject("capabilities")
+                if (capabilities != null) {
+                    val parsed = mutableListOf<String>()
+
+                    // 解析 resources
+                    capabilities.getAsJsonObject("resources")?.let { resources ->
+                        resources.keySet().forEach { key ->
+                            parsed.add("resource:$key")
+                        }
+                    }
+
+                    // 解析 tools
+                    capabilities.getAsJsonObject("tools")?.let { tools ->
+                        tools.keySet().forEach { key ->
+                            parsed.add("tool:$key")
+                        }
+                    }
+
+                    // 解析 prompts
+                    capabilities.getAsJsonObject("prompts")?.let { prompts ->
+                        prompts.keySet().forEach { key ->
+                            parsed.add("prompt:$key")
+                        }
+                    }
+
+                    // 解析 logging
+                    if (capabilities.has("logging")) {
+                        parsed.add("logging")
+                    }
+
+                    if (parsed.isNotEmpty()) {
+                        log.debug("Parsed capabilities from JSON-RPC: $parsed")
+                        return parsed
+                    }
+                }
+            }
+
+            // 如果 JSON 解析失败，尝试简单格式（一行一个）
+            output.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .also { log.debug("Parsed capabilities from simple format: $it") }
+
+        } catch (e: Exception) {
+            log.warn("Failed to parse capabilities as JSON, trying simple format: ${e.message}")
+            // 降级：尝试简单格式（一行一个能力）
+            output.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("{") }
+                .also {
+                    if (it.isNotEmpty()) {
+                        log.debug("Parsed capabilities from simple format: $it")
+                    } else {
+                        log.warn("No capabilities found in output")
+                    }
+                }
+        }
     }
 
     /**

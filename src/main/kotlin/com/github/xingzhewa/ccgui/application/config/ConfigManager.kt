@@ -28,8 +28,51 @@ class ConfigManager(private val project: Project) : Disposable {
     // 项目级存储
     private val configStorage: ConfigStorage by lazy { ConfigStorage.getInstance(project) }
 
+    // 热更新管理器
+    private val hotReloadManager: HotReloadManager by lazy { HotReloadManager.getInstance(project) }
+
     init {
         log.info("ConfigManager initialized")
+        setupHotReload()
+    }
+
+    /**
+     * 设置配置热更新
+     *
+     * 注册本地配置文件监听，当外部修改配置时自动重新加载
+     */
+    private fun setupHotReload() {
+        // 注册本地设置文件监听
+        if (hotReloadManager.registerLocalSettingsFile()) {
+            // 添加配置变更监听器
+            hotReloadManager.addChangeListener(object : ConfigChangeListener {
+                override fun onConfigFileChanged(filePath: String, isNewFile: Boolean) {
+                    log.info("Config file changed: $filePath, reloading...")
+                    // 重新加载配置
+                    onExternalConfigChanged(filePath)
+                }
+            })
+            // 启动热更新监听
+            hotReloadManager.start()
+            log.info("ConfigManager: Hot reload enabled for local settings")
+        }
+    }
+
+    /**
+     * 外部配置变更处理
+     *
+     * 当外部配置文件变更时调用，重新加载配置并通知订阅者
+     *
+     * @param filePath 变更的配置文件路径
+     */
+    private fun onExternalConfigChanged(filePath: String) {
+        // 如果当前激活的是 LOCAL_SETTINGS profile，需要更新配置
+        if (getActiveProfileId() == SpecialProviderIds.LOCAL_SETTINGS) {
+            // 发布配置变更事件（LocalSettingsReader 每次都重新读取文件，无需缓存清除）
+            val newConfig = getActiveModelConfig()
+            EventBus.publish(ConfigChangedEvent("externalConfig", newConfig))
+            log.info("ConfigManager: Reloaded local settings from external change")
+        }
     }
 
     // ===== 应用配置 =====

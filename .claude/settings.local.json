@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(grep ^e::*)",
+      "Bash(./gradlew compileKotlin --no-daemon)",
+      "Bash(head:*)"
+    ]
+  }
+}

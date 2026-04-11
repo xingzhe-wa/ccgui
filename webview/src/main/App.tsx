@@ -8,6 +8,7 @@ import { AppRouter } from './router';
 import { useAppStore } from '@/shared/stores';
 import { useQuestionStore } from '@/shared/stores/questionStore';
 import { useChatConfigStore } from '@/shared/stores/chatConfigStore';
+import { t } from '@/shared/i18n';
 import type { InteractiveQuestion } from '@/shared/types/interaction';
 
 interface ErrorBoundaryState {
@@ -38,15 +39,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
       return (
         <div className="flex h-screen w-screen items-center justify-center">
           <div className="text-center">
-            <div className="text-destructive text-lg font-semibold">应用渲染出错</div>
+            <div className="text-destructive text-lg font-semibold">{t('app.renderError')}</div>
             <div className="text-muted-foreground mt-2 text-sm">
-              {this.state.error?.message ?? '未知错误'}
+              {this.state.error?.message ?? t('app.unknownError')}
             </div>
             <button
               className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
-              重试
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -139,7 +140,7 @@ function App(): JSX.Element {
 function LoadingFallback(): JSX.Element {
   return (
     <div className="flex h-screen w-screen items-center justify-center">
-      <div className="animate-pulse text-lg">加载中...</div>
+      <div className="animate-pulse text-lg">{t('common.loading')}</div>
     </div>
   );
 }

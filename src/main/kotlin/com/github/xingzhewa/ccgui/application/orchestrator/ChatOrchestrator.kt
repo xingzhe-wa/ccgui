@@ -99,11 +99,12 @@ class ChatOrchestrator(private val project: Project) : Disposable {
 
             // 4. 发送消息并处理流式响应
             var fullContent = ""
+            val messageId = assistantMessage.id
             claudeClient.sendMessage(content, sdkOptions, object : ClaudeCodeClient.SdkEventListener {
                 override fun onTextDelta(text: String) {
                     fullContent += text
                     _currentMessage.value = assistantMessage.copy(content = fullContent)
-                    streamingEngine.appendChunk(text)
+                    streamingEngine.appendChunk(text, messageId)
                 }
 
                 override fun onResult(result: com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes.SdkResultMessage) {
@@ -116,6 +117,7 @@ class ChatOrchestrator(private val project: Project) : Disposable {
                         content = "Error: $error",
                         status = MessageStatus.FAILED
                     )
+                    streamingEngine.setError(error, messageId)
                 }
             })
 
@@ -138,7 +140,8 @@ class ChatOrchestrator(private val project: Project) : Disposable {
             Result.failure(e)
         } finally {
             _isProcessing.value = false
-            streamingEngine.finishStreaming()
+            val messageId = _currentMessage.value?.id ?: ""
+            streamingEngine.finishStreaming(messageId)
         }
     }
 
@@ -149,8 +152,9 @@ class ChatOrchestrator(private val project: Project) : Disposable {
         if (_isProcessing.value) {
             claudeClient.cancelCurrentRequest()
             _isProcessing.value = false
+            val messageId = _currentMessage.value?.id ?: ""
             _currentMessage.value = null
-            streamingEngine.cancelStreaming()
+            streamingEngine.cancelStreaming(messageId)
             log.info("Current message cancelled")
         }
     }

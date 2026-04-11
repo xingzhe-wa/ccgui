@@ -154,6 +154,15 @@ data class ThemeChangedEvent(
 }
 
 /**
+ * 语言变更事件
+ */
+data class LocaleChangedEvent(
+    val locale: java.util.Locale
+) : Event("locale.changed") {
+    override val type: String = "locale.changed"
+}
+
+/**
  * 模型切换事件
  */
 data class ModelSwitchedEvent(
