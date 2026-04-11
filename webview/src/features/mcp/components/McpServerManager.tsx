@@ -128,12 +128,6 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
     [testConnection]
   );
 
-  // 配置
-  const handleConfigure = useCallback((server: McpServer) => {
-    setEditingServer(server);
-    setIsCreating(false);
-  }, []);
-
   // 刷新
   const handleRefresh = useCallback(() => {
     refreshServers();
@@ -195,7 +189,6 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
           onStart={handleStart}
           onStop={handleStop}
           onTest={handleTest}
-          onConfigure={handleConfigure}
           onToggleEnabled={handleToggleEnabled}
         />
       </div>

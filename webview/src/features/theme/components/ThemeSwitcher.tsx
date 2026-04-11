@@ -93,7 +93,7 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
       {isOpen && (
         <ul
           className={cn(
-            'absolute z-[10000] bottom-full left-0 mb-1 w-full min-w-[180px]',
+            'absolute z-[10000] top-full left-0 mt-1 w-full min-w-[180px]',
             'bg-background-elevated border border-border rounded-md shadow-lg',
             'py-1 overflow-hidden'
           )}

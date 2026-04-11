@@ -43,7 +43,6 @@ const defaultSkill: Partial<Skill> = {
   category: SkillCategoryEnum.CODE_GENERATION,
   prompt: '',
   variables: [],
-  enabled: true,
   scope: SkillScope.PROJECT
 };
 
@@ -102,7 +101,6 @@ export const SkillEditor = memo<SkillEditorProps>(function SkillEditor({
         prompt: formData.prompt?.trim() || '',
         variables: formData.variables || [],
         shortcut: formData.shortcut,
-        enabled: formData.enabled ?? true,
         scope: formData.scope || SkillScope.PROJECT,
         createdAt: skill?.createdAt || Date.now(),
         updatedAt: Date.now()

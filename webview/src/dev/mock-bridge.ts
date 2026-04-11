@@ -151,7 +151,6 @@ const mockSkills: Skill[] = [
       { name: 'language', type: VariableType.TEXT, required: true, description: '目标编程语言' },
       { name: 'description', type: VariableType.TEXT, required: true, description: '代码需求描述' },
     ],
-    enabled: true,
     scope: SkillScope.PROJECT,
   },
   {
@@ -165,7 +164,6 @@ const mockSkills: Skill[] = [
       { name: 'language', type: VariableType.TEXT, required: true, description: '代码语言' },
       { name: 'code', type: VariableType.CODE, required: true, description: '待审查的代码' },
     ],
-    enabled: true,
     scope: SkillScope.PROJECT,
   },
   {
@@ -179,7 +177,6 @@ const mockSkills: Skill[] = [
       { name: 'language', type: VariableType.TEXT, required: true, description: '代码语言' },
       { name: 'code', type: VariableType.CODE, required: true, description: '源代码' },
     ],
-    enabled: true,
     scope: SkillScope.PROJECT,
   },
   {
@@ -193,7 +190,6 @@ const mockSkills: Skill[] = [
       { name: 'language', type: VariableType.TEXT, required: true, description: '代码语言' },
       { name: 'code', type: VariableType.CODE, required: true, description: '待重构代码' },
     ],
-    enabled: false,
     scope: SkillScope.PROJECT,
   },
 ];

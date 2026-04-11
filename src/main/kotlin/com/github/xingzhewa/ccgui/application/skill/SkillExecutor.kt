@@ -94,16 +94,7 @@ class SkillExecutor(private val project: Project) : Disposable {
         val startTime = System.currentTimeMillis()
 
         try {
-            // 1. 检查 Skill 是否启用
-            if (!skill.enabled) {
-                return@withContext SkillResult(
-                    skillId = skill.id,
-                    success = false,
-                    error = "Skill is disabled"
-                )
-            }
-
-            // 2. 记录活跃执行
+            // 1. 记录活跃执行
             activeExecutions[executionId] = skill.id
 
             // 3. 构建 prompt（替换变量）

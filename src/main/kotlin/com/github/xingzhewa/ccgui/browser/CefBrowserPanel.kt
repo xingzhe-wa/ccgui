@@ -1058,8 +1058,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 "id" to skill.id,
                 "name" to skill.name,
                 "description" to skill.description,
-                "category" to skill.category.name,
-                "enabled" to skill.enabled
+                "category" to skill.category.name
             )
         }
     }

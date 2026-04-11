@@ -30,8 +30,6 @@ export interface McpServerCardProps {
   onStop?: () => void;
   /** 测试连接回调 */
   onTest?: () => void;
-  /** 配置回调 */
-  onConfigure?: () => void;
   /** 启用/禁用回调 */
   onToggleEnabled?: (server: McpServer) => void;
   className?: string;
@@ -80,7 +78,6 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
   onStart,
   onStop,
   onTest,
-  onConfigure,
   onToggleEnabled,
   className
 }: McpServerCardProps) {
@@ -124,14 +121,6 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
       onTest?.();
     },
     [onTest]
-  );
-
-  const handleConfigure = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onConfigure?.();
-    },
-    [onConfigure]
   );
 
   const handleToggleEnabled = useCallback(
@@ -249,11 +238,6 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
         {onTest && !isConnecting && (
           <Button variant="ghost" size="icon" onClick={handleTest} title="测试连接">
             <RefreshCw className="h-4 w-4" />
-          </Button>
-        )}
-        {onConfigure && (
-          <Button variant="ghost" size="icon" onClick={handleConfigure} title="配置">
-            <Edit2 className="h-4 w-4" />
           </Button>
         )}
         {onEdit && (

@@ -93,7 +93,6 @@ data class SkillVariable(
  * @param prompt 提示词模板
  * @param variables 变量列表
  * @param shortcut 快捷键
- * @param enabled 是否启用
  * @param scope 作用域
  * @param createdAt 创建时间
  * @param updatedAt 更新时间
@@ -107,7 +106,6 @@ data class Skill(
     val prompt: String,
     val variables: List<SkillVariable> = emptyList(),
     val shortcut: String? = null,
-    val enabled: Boolean = true,
     val scope: SkillScope = SkillScope.GLOBAL,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
@@ -158,7 +156,6 @@ data class Skill(
                         SkillVariable.fromJson(it.asJsonObject)
                     } ?: emptyList(),
                     shortcut = json.get("shortcut")?.asString,
-                    enabled = json.get("enabled")?.asBoolean ?: true,
                     scope = SkillScope.valueOf(
                         json.get("scope")?.asString ?: "GLOBAL"
                     ),
@@ -186,7 +183,6 @@ data class Skill(
                 variables.forEach { add(it.toJson()) }
             })
             shortcut?.let { addProperty("shortcut", it) }
-            addProperty("enabled", enabled)
             addProperty("scope", scope.name)
             addProperty("createdAt", createdAt)
             addProperty("updatedAt", updatedAt)

@@ -314,27 +314,6 @@ class SkillsManager(private val project: Project) : Disposable {
     }
 
     /**
-     * 获取启用的 Skills
-     *
-     * @return 启用的 Skills
-     */
-    fun getEnabledSkills(): List<Skill> {
-        return skills.values.filter { it.enabled }
-    }
-
-    /**
-     * 启用/禁用 Skill
-     *
-     * @param skillId Skill ID
-     * @param enabled 是否启用
-     * @return 是否成功
-     */
-    fun setSkillEnabled(skillId: String, enabled: Boolean): Boolean {
-        val skill = skills[skillId] ?: return false
-        return updateSkill(skill.copy(enabled = enabled))
-    }
-
-    /**
      * 搜索 Skills
      *
      * @param query 搜索关键词

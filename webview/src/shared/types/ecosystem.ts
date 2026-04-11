@@ -64,7 +64,6 @@ export interface Skill {
   prompt: string;
   variables: SkillVariable[];
   shortcut?: string;
-  enabled: boolean;
   scope: SkillScope;
   createdAt?: number;
   updatedAt?: number;
