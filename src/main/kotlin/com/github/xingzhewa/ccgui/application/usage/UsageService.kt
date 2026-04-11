@@ -27,6 +27,9 @@ class UsageService(private val project: Project) {
     /** 用量记录 */
     private val records = ConcurrentHashMap<String, UsageRecord>()
 
+    /** 预算管理器 */
+    private val _budgetManager: BudgetManager by lazy { BudgetManager.getInstance(project) }
+
     /** 当前会话用量 */
     private val _currentSessionUsage = MutableStateFlow(SessionUsage())
     val currentSessionUsage: StateFlow<SessionUsage> = _currentSessionUsage.asStateFlow()
@@ -34,6 +37,13 @@ class UsageService(private val project: Project) {
     /** 项目总用量 */
     private val _projectUsage = MutableStateFlow(ProjectUsage())
     val projectUsage: StateFlow<ProjectUsage> = _projectUsage.asStateFlow()
+
+    /**
+     * 预算管理器
+     *
+     * 用于检查预算状态和告警
+     */
+    val budgetManager: BudgetManager get() = _budgetManager
 
     init {
         loadHistoricalUsage()

@@ -36,11 +36,13 @@ dependencies {
     // JSON 处理
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // HTTP Client (for daemon communication)
-    implementation("io.ktor:ktor-client-core:2.3.7")
-    implementation("io.ktor:ktor-client-okhttp:2.3.7")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-gson:2.3.7")
+    // 注意：HTTP 客户端已改用 IntelliJ Platform 内置 HttpRequests
+    // 架构文档要求：移除 OkHttp/Retrofit，使用 Platform HttpClient
+    // 原有 Ktor 依赖已移除：
+    // - io.ktor:ktor-client-core:2.3.7 (移除)
+    // - io.ktor:ktor-client-okhttp:2.3.7 (移除)
+    // - io.ktor:ktor-client-content-negotiation:2.3.7 (移除)
+    // - io.ktor:ktor-serialization-gson:2.3.7 (移除)
 
     // JCEF (已包含在 IntelliJ Platform 中，无需额外依赖)
 

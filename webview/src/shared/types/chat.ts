@@ -31,11 +31,15 @@ export enum MessageStatus {
 /**
  * 内容部分类型（联合类型）
  * 必须使用 discriminated union 处理，不能直接访问 .name / .type
+ * 扩展以支持架构文档中的所有内容块类型
  */
 export type ContentPart =
   | TextContentPart
   | ImageContentPart
-  | FileContentPart;
+  | FileContentPart
+  | ThinkingContentPart
+  | ToolUseContentPart
+  | ToolResultContentPart;
 
 /**
  * 文本内容
@@ -68,6 +72,49 @@ export interface FileContentPart {
   size?: number;
 }
 
+/**
+ * 思考过程内容块
+ * 对应架构文档中的 thinking 类型
+ */
+export interface ThinkingContentPart {
+  type: 'thinking';
+  thinking: string;
+  text?: string; // 可选的简短文本描述
+}
+
+/**
+ * 工具调用内容块
+ * 对应架构文档中的 tool_use 类型
+ */
+export interface ToolUseContentPart {
+  type: 'tool_use';
+  id?: string;
+  name: string;
+  input?: ToolInput;
+}
+
+/**
+ * 工具输入类型
+ */
+export type ToolInput =
+  | string
+  | number
+  | boolean
+  | ToolInput[]
+  | { [key: string]: ToolInput }
+  | null;
+
+/**
+ * 工具结果内容块
+ * 对应架构文档中的 tool_result 类型
+ */
+export interface ToolResultContentPart {
+  type: 'tool_result';
+  tool_use_id?: string;
+  content?: string | ToolResultContentPart[];
+  is_error?: boolean;
+}
+
 // ============== 消息类型 ==============
 
 /**
@@ -94,6 +141,7 @@ export interface MessageMetadata {
 
 /**
  * 聊天消息
+ * 扩展以支持架构文档中的流式消息和原始消息格式
  */
 export interface ChatMessage {
   id: ID;
@@ -104,6 +152,47 @@ export interface ChatMessage {
   references?: MessageReference[];
   metadata?: MessageMetadata;
   status?: MessageStatus;
+  /** 流式输出标识 */
+  isStreaming?: boolean;
+  /** 流式 turn 标识 */
+  __turnId?: number;
+  /** 原始消息内容（用于解析复杂内容块） */
+  raw?: ClaudeRawMessage | string;
+}
+
+/**
+ * Claude 原始消息格式
+ * 对应架构文档中的 ClaudeRawMessage
+ */
+export interface ClaudeRawMessage {
+  id?: string;
+  type?: string;
+  role?: string;
+  content?: ClaudeRawContent[];
+  model?: string;
+  stop_reason?: string;
+  usage?: MessageUsage;
+}
+
+/**
+ * Claude 原始内容块
+ */
+export type ClaudeRawContent =
+  | { type: 'text'; text?: string }
+  | { type: 'thinking'; thinking?: string; text?: string }
+  | { type: 'tool_use'; id?: string; name?: string; input?: ToolInput }
+  | { type: 'tool_result'; tool_use_id?: string; content?: string | ClaudeRawContent[]; is_error?: boolean }
+  | { type: 'image'; source?: { type: string; media_type: string; data: string } }
+  | { type: 'document'; document?: { type: string; source?: { type: string; media_type: string; data: string } } };
+
+/**
+ * 消息使用量统计
+ */
+export interface MessageUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens?: number;
+  cache_read_tokens?: number;
 }
 
 /**

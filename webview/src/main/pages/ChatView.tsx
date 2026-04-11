@@ -6,6 +6,7 @@
  */
 
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { shallow } from 'zustand/shallow';
 import { MessageList } from '@/features/chat/components/MessageList';
 import { ChatInput } from '@/features/chat/components/ChatInput';
 import { QuickActionsPanel } from '@/features/chat/components/QuickActionsPanel';
@@ -15,7 +16,7 @@ import { InteractiveQuestionPanel } from '@/features/interaction/components/Inte
 import { MessageDetail } from '@/features/chat/components/PreviewPanel/MessageDetail';
 import { TaskStatusBar } from '@/main/components/TaskStatusBar';
 import { useSessionStore } from '@/shared/stores/sessionStore';
-import { useStreamingStore } from '@/shared/stores/streamingStore';
+import { useStreamingStore, useStreamingState } from '@/shared/stores/streamingStore';
 import { useQuestionStore } from '@/shared/stores/questionStore';
 import { useAppStore } from '@/shared/stores/appStore';
 import { javaBridge } from '@/lib/java-bridge';
@@ -24,9 +25,11 @@ import { MessageRole, MessageStatus } from '@/shared/types';
 import type { QuestionType } from '@/shared/types/interaction';
 
 export const ChatView = memo(function ChatView(): JSX.Element {
+  // 使用 shallow 比较优化：避免 sessionState 变化时不必要的重渲染
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
-  const sessionState = useSessionStore((s) =>
-    s.currentSessionId ? s.sessionStates[s.currentSessionId] : undefined
+  const sessionState = useSessionStore(
+    (s) => (s.currentSessionId ? s.sessionStates[s.currentSessionId] : undefined),
+    shallow
   );
   const addMessage = useSessionStore((s) => s.addMessage);
   const currentQuestion = useQuestionStore((s) => s.currentQuestion);
@@ -34,7 +37,9 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   const submitAnswer = useQuestionStore((s) => s.submitAnswer);
   const skipQuestion = useQuestionStore((s) => s.skipQuestion);
 
-  const { streamingMessageId, isStreaming, startStreaming } = useStreamingStore();
+  // 使用优化的选择器：只获取需要的状态字段
+  const { streamingMessageId, isStreaming } = useStreamingState();
+  const startStreaming = useStreamingStore((s) => s.startStreaming);
 
   const messages = useMemo<ChatMessage[]>(
     () => sessionState?.messages ?? [],

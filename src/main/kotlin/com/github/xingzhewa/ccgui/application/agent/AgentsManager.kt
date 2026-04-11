@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -60,103 +61,20 @@ class AgentsManager(private val project: Project) : Disposable {
     // ==================== 初始化 ====================
 
     init {
-        loadBuiltinAgents()
+        // Agents should be loaded from persistent storage
+        // No hardcoded builtin agents - all agents are user-defined
+        loadAgentsFromFileSystem()
         loadAgentsFromStorage()
         log.info("AgentsManager initialized for project: ${project.name}")
     }
 
     /**
-     * 加载内置 Agents
-     */
-    private fun loadBuiltinAgents() {
-        val builtinAgents = listOf(
-            Agent.codeReviewer(),
-            Agent(
-                name = "代码生成器",
-                description = "根据需求生成高质量代码",
-                avatar = "⚡",
-                systemPrompt = "你是一个专业的代码生成助手。根据用户需求生成清晰、高效、可维护的代码。",
-                capabilities = listOf(
-                    AgentCapability.CODE_GENERATION,
-                    AgentCapability.DOCUMENTATION
-                ),
-                mode = AgentMode.BALANCED
-            ),
-            Agent(
-                name = "重构专家",
-                description = "重构代码以提升质量和可维护性",
-                avatar = "🔧",
-                systemPrompt = "你是一个代码重构专家。分析代码并提供重构建议，重点关注代码质量、性能和可维护性。",
-                capabilities = listOf(
-                    AgentCapability.REFACTORING,
-                    AgentCapability.CODE_REVIEW
-                ),
-                mode = AgentMode.CAUTIOUS
-            ),
-            Agent(
-                name = "测试工程师",
-                description = "为代码生成完整的单元测试",
-                avatar = "🧪",
-                systemPrompt = "你是一个测试工程师。为代码生成完整的单元测试，覆盖主要场景和边界情况。",
-                capabilities = listOf(
-                    AgentCapability.TESTING,
-                    AgentCapability.CODE_GENERATION
-                ),
-                mode = AgentMode.BALANCED
-            ),
-            Agent(
-                name = "文档助手",
-                description = "为代码生成清晰的文档",
-                avatar = "📚",
-                systemPrompt = "你是一个文档助手。为代码生成清晰、完整的文档，包括功能说明、参数说明和使用示例。",
-                capabilities = listOf(
-                    AgentCapability.DOCUMENTATION,
-                    AgentCapability.CODE_REVIEW
-                ),
-                mode = AgentMode.BALANCED
-            ),
-            Agent(
-                name = "调试专家",
-                description = "诊断和修复代码中的问题",
-                avatar = "🐛",
-                systemPrompt = "你是一个调试专家。分析代码中的问题，提供诊断和修复建议。",
-                capabilities = listOf(
-                    AgentCapability.DEBUGGING,
-                    AgentCapability.CODE_REVIEW
-                ),
-                mode = AgentMode.CAUTIOUS
-            ),
-            Agent(
-                name = "全能助手",
-                description = "具备多种能力的综合助手",
-                avatar = "🤖",
-                systemPrompt = "你是一个全能的代码助手，可以帮助完成各种编程任务。",
-                capabilities = AgentCapability.entries.toList(),
-                tools = listOf("Read", "Write", "Glob", "Grep", "Bash"),
-                mode = AgentMode.BALANCED
-            )
-        )
-
-        builtinAgents.forEach { agent ->
-            addAgent(agent)
-        }
-
-        log.info("Loaded ${builtinAgents.size} builtin agents")
-    }
-
-    /** 内置 Agent IDs，用于区分用户自定义 Agents */
-    private val builtinAgentIds = mutableSetOf<String>()
-
-    /**
      * 从存储加载 Agents
      *
      * 使用 IntelliJ PropertiesComponent 持久化用户自定义 Agents。
-     * 内置 Agents 始终作为默认存在，不会被存储覆盖。
      */
     private fun loadAgentsFromStorage() {
         log.debug("Loading agents from storage...")
-        // 记录已加载的内置 Agent IDs
-        builtinAgentIds.addAll(agents.keys)
         try {
             val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
                 .getService(com.intellij.ide.util.PropertiesComponent::class.java)
@@ -167,7 +85,6 @@ class AgentsManager(private val project: Project) : Disposable {
             array.forEach { element ->
                 try {
                     val agent = Agent.fromJson(element.asJsonObject) ?: return@forEach
-                    // 只加载非内置（用户自定义）的 Agents，内置 Agents 已在 loadBuiltinAgents 中加载
                     if (!agents.containsKey(agent.id)) {
                         addAgent(agent)
                         loadedCount++
@@ -176,28 +93,152 @@ class AgentsManager(private val project: Project) : Disposable {
                     log.warn("Failed to load agent from storage: ${e.message}")
                 }
             }
-            log.info("Loaded $loadedCount custom agents from storage")
+            log.info("Loaded $loadedCount agents from storage")
         } catch (e: Exception) {
             log.error("Failed to load agents from storage", e)
         }
     }
 
     /**
-     * 持久化用户自定义 Agents 到存储
+     * 从文件系统加载 Agents
+     *
+     * 从项目 `.claude/agents/` 目录读取 `.md/.json` 文件。
+     * 与 Claude CLI 原生目录结构兼容。
      */
-    private fun persistCustomAgents() {
+    private fun loadAgentsFromFileSystem() {
+        log.debug("Loading agents from filesystem...")
         try {
-            val customAgents = agents.values.filter { it.id !in builtinAgentIds }
+            val basePath = project.basePath ?: run {
+                log.warn("Project base path is null, skipping filesystem loading")
+                return
+            }
+
+            val agentsDir = File(basePath, ".claude/agents")
+            if (!agentsDir.exists() || !agentsDir.isDirectory) {
+                log.debug("No .claude/agents directory found at: ${agentsDir.absolutePath}")
+                return
+            }
+
+            val files = agentsDir.listFiles { file ->
+                file.isFile && (file.extension == "json" || file.extension == "md")
+            } ?: return
+
+            var loadedCount = 0
+            files.forEach { file ->
+                try {
+                    val agent = parseAgentFromFile(file)
+                    if (agent != null && !agents.containsKey(agent.id)) {
+                        addAgent(agent)
+                        loadedCount++
+                    }
+                } catch (e: Exception) {
+                    log.warn("Failed to load agent from file ${file.name}: ${e.message}")
+                }
+            }
+            log.info("Loaded $loadedCount agents from filesystem")
+        } catch (e: Exception) {
+            log.error("Failed to load agents from filesystem", e)
+        }
+    }
+
+    /**
+     * 从文件解析 Agent
+     *
+     * 支持 .json 和 .md 文件格式。
+     * .md 文件使用 front-matter 格式或纯文本描述。
+     *
+     * @param file 文件
+     * @return Agent 或 null
+     */
+    private fun parseAgentFromFile(file: File): Agent? {
+        return when (file.extension) {
+            "json" -> parseAgentFromJson(file)
+            "md" -> parseAgentFromMarkdown(file)
+            else -> null
+        }
+    }
+
+    /**
+     * 从 JSON 文件解析 Agent
+     */
+    private fun parseAgentFromJson(file: File): Agent? {
+        val content = file.readText()
+        val json = JsonUtils.gson.fromJson(content, com.google.gson.JsonObject::class.java)
+        return Agent.fromJson(json)
+    }
+
+    /**
+     * 从 Markdown 文件解析 Agent
+     *
+     * 支持 front-matter 格式:
+     * ---
+     * name: architect
+     * description: System architecture design specialist
+     * tools: [file_read, file_write]
+     * ---
+     * System prompt content here...
+     */
+    private fun parseAgentFromMarkdown(file: File): Agent? {
+        val content = file.readText()
+
+        // Check for front-matter format
+        if (!content.trimStart().startsWith("---")) {
+            // Plain markdown without front-matter, use filename as name
+            return Agent(
+                name = file.nameWithoutExtension,
+                description = content.take(200),
+                systemPrompt = content
+            )
+        }
+
+        val parts = content.split("---", limit = 3)
+        if (parts.size < 3) {
+            return null
+        }
+
+        val frontMatter = parts[1]
+        val body = parts[2].trim()
+
+        val name = extractFrontMatterField(frontMatter, "name") ?: file.nameWithoutExtension
+        val description = extractFrontMatterField(frontMatter, "description") ?: ""
+        val tools = extractFrontMatterField(frontMatter, "tools")?.let { toolsStr ->
+            toolsStr.removeSurrounding("[", "]")
+                .split(",")
+                .map { it.trim().removeSurrounding("\"", "'") }
+                .filter { it.isNotEmpty() }
+        } ?: emptyList()
+
+        return Agent(
+            name = name,
+            description = description,
+            systemPrompt = body,
+            tools = tools
+        )
+    }
+
+    /**
+     * 提取 front-matter 字段
+     */
+    private fun extractFrontMatterField(frontMatter: String, field: String): String? {
+        val pattern = Regex("$field:\\s*(.+?)(?:\\n|$)", RegexOption.IGNORE_CASE)
+        return pattern.find(frontMatter)?.groupValues?.get(1)?.trim()
+    }
+
+    /**
+     * 持久化所有 Agents 到存储
+     */
+    private fun persistAgents() {
+        try {
             val jsonArray = com.google.gson.JsonArray()
-            customAgents.forEach { agent ->
+            agents.values.forEach { agent ->
                 jsonArray.add(agent.toJson())
             }
             val properties = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject
                 .getService(com.intellij.ide.util.PropertiesComponent::class.java)
             properties.setValue("ccgui.custom.agents", jsonArray.toString())
-            log.debug("Persisted ${customAgents.size} custom agents")
+            log.debug("Persisted ${agents.size} agents")
         } catch (e: Exception) {
-            log.error("Failed to persist custom agents", e)
+            log.error("Failed to persist agents", e)
         }
     }
 
@@ -224,12 +265,9 @@ class AgentsManager(private val project: Project) : Disposable {
         agentsByScope.getOrPut(agent.scope) { mutableSetOf() }.add(agent.id)
 
         updateAllAgents()
+        persistAgents()
 
         log.info("Agent added: ${agent.id} - ${agent.name}")
-
-        if (agent.id !in builtinAgentIds) {
-            persistCustomAgents()
-        }
 
         return true
     }
@@ -275,7 +313,7 @@ class AgentsManager(private val project: Project) : Disposable {
 
         log.info("Agent updated: ${agent.id}")
 
-        persistCustomAgents()
+        persistAgents()
 
         return true
     }
@@ -299,7 +337,7 @@ class AgentsManager(private val project: Project) : Disposable {
 
         log.info("Agent deleted: $agentId")
 
-        persistCustomAgents()
+        persistAgents()
 
         return true
     }

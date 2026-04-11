@@ -116,7 +116,9 @@ class ClaudeCodeClient(private val project: Project) : Disposable {
 
             // 如果禁用，直接返回错误
             if (modelConfig.provider == "disabled" || modelConfig.model.isBlank()) {
-                return Result.failure(IllegalStateException("No active provider configured. Please set up your API key in settings."))
+                val errorMsg = "No active provider configured. Please set up your API key in settings."
+                listener?.onError(errorMsg)
+                return Result.failure(IllegalStateException(errorMsg))
             }
 
             // 填充 SdkOptions 中未设置的字段（使用配置中的值）

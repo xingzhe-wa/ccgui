@@ -3,6 +3,7 @@ package com.github.xingzhewa.ccgui.application.context
 import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkOptions
 import com.github.xingzhewa.ccgui.application.usage.UsageService
+import com.github.xingzhewa.ccgui.model.message.ChatMessage
 import com.github.xingzhewa.ccgui.util.logger
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
@@ -18,6 +19,10 @@ import java.util.concurrent.ConcurrentHashMap
  * Claude Code 默认上下文窗口约为 200K tokens，当上下文超过阈值（默认80%）时，
  * 自动发送 /compact 命令压缩对话历史，确保对话能够持续进行。
  *
+ * 支持两种压缩模式：
+ * 1. CLI压缩：调用 /compact 命令，由 Claude CLI 处理
+ * 2. 本地压缩：使用 ContextCompressor 进行本地智能压缩
+ *
  * @param project IntelliJ项目实例
  */
 @Service(Service.Level.PROJECT)
@@ -25,6 +30,7 @@ class ContextManager(private val project: Project) {
 
     private val log = logger<ContextManager>()
     private val usageService = UsageService.getInstance(project)
+    private val contextCompressor by lazy { ContextCompressor.getInstance(project) }
 
     /** 每个会话的上下文长度追踪（字符数） */
     private val sessionContextLength = ConcurrentHashMap<String, Long>()
@@ -185,6 +191,82 @@ class ContextManager(private val project: Project) {
 
         log.info("ContextManager: Manual compaction completed for session $sessionId, reduced from $currentLength to $targetLength chars")
         return CompactResult.Success(targetLength, targetTokens, manual = true)
+    }
+
+    /**
+     * 本地智能压缩
+     *
+     * 使用 ContextCompressor 对消息列表进行本地压缩，生成摘要替换中间消息。
+     * 这是当 CLI /compact 命令不可用时的降级方案。
+     *
+     * @param sessionId 会话ID
+     * @param messages 当前消息列表
+     * @return 压缩结果，包含压缩后的消息列表
+     */
+    suspend fun localCompact(sessionId: String, messages: List<ChatMessage>): LocalCompactResult {
+        log.info("ContextManager: Starting local context compaction for session $sessionId with ${messages.size} messages")
+
+        return try {
+            val compressionResult = contextCompressor.compress(messages, sessionId)
+
+            when (compressionResult) {
+                is ContextCompressor.CompressionResult.Success -> {
+                    // 更新上下文长度追踪
+                    val estimatedTokens = contextCompressor.estimateTokens(messages)
+                    sessionContextLength[sessionId] = (estimatedTokens * 3.5).toLong()
+                    sessionTokenCount[sessionId] = estimatedTokens.toLong()
+
+                    // 同步到 UsageService
+                    usageService.resetSessionUsage(sessionId)
+
+                    log.info("ContextManager: Local compaction succeeded for session $sessionId, " +
+                            "removed ${compressionResult.removedCount} messages, " +
+                            "remaining ${compressionResult.compressedCount} messages")
+
+                    LocalCompactResult.Success(
+                        compressedMessages = compressionResult.compressedCount,
+                        removedMessages = compressionResult.removedCount,
+                        hasSummary = compressionResult.summaryMessage != null
+                    )
+                }
+
+                is ContextCompressor.CompressionResult.Skipped -> {
+                    log.debug("ContextCompressor: Skipped - ${compressionResult.reason}")
+                    LocalCompactResult.Skipped(compressionResult.reason)
+                }
+
+                is ContextCompressor.CompressionResult.Failed -> {
+                    log.warn("ContextManager: Local compaction failed for session $sessionId: ${compressionResult.error}")
+                    LocalCompactResult.Failed(compressionResult.error)
+                }
+            }
+        } catch (e: Exception) {
+            log.error("ContextManager: Local compaction error for session $sessionId", e)
+            LocalCompactResult.Failed(e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * 本地压缩结果
+     */
+    sealed class LocalCompactResult {
+        data class Success(
+            val compressedMessages: Int,
+            val removedMessages: Int,
+            val hasSummary: Boolean
+        ) : LocalCompactResult()
+        data class Skipped(val reason: String) : LocalCompactResult()
+        data class Failed(val error: String) : LocalCompactResult()
+    }
+
+    /**
+     * 检查消息是否为关键消息（不可压缩）
+     *
+     * @param message 消息
+     * @return true 如果是关键消息
+     */
+    fun isCriticalMessage(message: ChatMessage): Boolean {
+        return contextCompressor.isCriticalMessage(message)
     }
 
     /**

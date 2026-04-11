@@ -3,6 +3,7 @@ package com.github.xingzhewa.ccgui.application.mcp
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.McpServerConnectedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.McpServerDisconnectedEvent
+import com.github.xingzhewa.ccgui.infrastructure.storage.McpServerStorage
 import com.github.xingzhewa.ccgui.model.mcp.McpScope
 import com.github.xingzhewa.ccgui.model.mcp.McpServer
 import com.github.xingzhewa.ccgui.model.mcp.McpServerStatus
@@ -44,6 +45,9 @@ class McpServerManager(private val project: Project) : Disposable {
     private val log = logger<McpServerManager>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** MCP 服务器存储服务 */
+    private val storage = McpServerStorage.getInstance(project)
+
     /** 所有 MCP 服务器 (key: serverId) */
     private val servers = ConcurrentHashMap<String, McpServer>()
 
@@ -64,32 +68,29 @@ class McpServerManager(private val project: Project) : Disposable {
     // ==================== 初始化 ====================
 
     init {
-        loadBuiltinServers()
+        // MCP servers are loaded from persistent storage only
+        // No hardcoded builtin servers
         loadServersFromStorage()
         log.info("McpServerManager initialized for project: ${project.name}")
-    }
-
-    /**
-     * 加载内置服务器
-     */
-    private fun loadBuiltinServers() {
-        val builtinServers = listOf(
-            McpServer.fileSystem()
-        )
-
-        builtinServers.forEach { server ->
-            addServer(server)
-        }
-
-        log.info("Loaded ${builtinServers.size} builtin MCP servers")
     }
 
     /**
      * 从存储加载服务器
      */
     private fun loadServersFromStorage() {
-        // TODO: 从持久化存储加载
         log.debug("Loading MCP servers from storage...")
+        try {
+            val loadedServers = storage.loadServers()
+            loadedServers.forEach { server ->
+                servers[server.id] = server
+                serversByScope.getOrPut(server.scope) { mutableSetOf() }.add(server.id)
+            }
+            updateAllServers()
+            updateConnectionStates()
+            log.info("Loaded ${loadedServers.size} MCP servers from storage")
+        } catch (e: Exception) {
+            log.error("Failed to load MCP servers from storage", e)
+        }
     }
 
     // ==================== 核心 API ====================
@@ -108,6 +109,7 @@ class McpServerManager(private val project: Project) : Disposable {
 
         servers[server.id] = server
         serversByScope.getOrPut(server.scope) { mutableSetOf() }.add(server.id)
+        storage.addServer(server)
 
         updateAllServers()
         updateConnectionStates()
@@ -137,6 +139,7 @@ class McpServerManager(private val project: Project) : Disposable {
         }
 
         servers[server.id] = server
+        storage.updateServer(server)
         updateAllServers()
         updateConnectionStates()
 
@@ -160,6 +163,7 @@ class McpServerManager(private val project: Project) : Disposable {
 
         // 更新索引
         serversByScope[server.scope]?.remove(serverId)
+        storage.deleteServer(serverId)
 
         updateAllServers()
         updateConnectionStates()

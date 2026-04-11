@@ -10,6 +10,7 @@ import java.nio.file.Paths
  * Claude CLI 本地设置读取器
  *
  * 从 ~/.claude/settings.json 读取 Claude CLI 的配置信息
+ * 同时支持检测 CLI Login Provider 的认证状态
  */
 object LocalSettingsReader {
 
@@ -21,6 +22,71 @@ object LocalSettingsReader {
     private val settingsFilePath: Path by lazy {
         val homeDir = System.getProperty("user.home")
         Paths.get(homeDir, ".claude", "settings.json")
+    }
+
+    /**
+     * 检查 Claude CLI 是否已登录
+     *
+     * CLI Login 模式通过检查 settings.json 中的认证状态来判断
+     * 如果存在有效的 ANTHROPIC_AUTH_TOKEN，则认为 CLI 已登录
+     *
+     * @return true 如果 CLI 已登录（存在有效认证令牌）
+     */
+    fun isCliLoggedIn(): Boolean {
+        val token = getCliAuthToken()
+        return !token.isNullOrBlank()
+    }
+
+    /**
+     * 获取 CLI 认证令牌
+     *
+     * 从 settings.json 中读取 ANTHROPIC_AUTH_TOKEN
+     * 这是 CLI Login Provider 使用的认证方式
+     *
+     * @return 认证令牌或 null
+     */
+    fun getCliAuthToken(): String? {
+        return readSettingsJson()?.getAsJsonArray("providers")
+            ?.firstOrNull()
+            ?.asJsonObject
+            ?.getAsJsonObject("settingsConfig")
+            ?.getAsJsonObject("env")
+            ?.get("ANTHROPIC_AUTH_TOKEN")
+            ?.asString
+    }
+
+    /**
+     * 获取 CLI Login Provider 的配置
+     *
+     * 如果 CLI 已登录，返回对应的 Provider 配置
+     * 否则返回 null
+     *
+     * @return CLI Provider 配置或 null
+     */
+    fun getCliProvider(): LocalProvider? {
+        if (!isCliLoggedIn()) {
+            log.info("CLI not logged in, no CLI provider available")
+            return null
+        }
+
+        val json = readSettingsJson() ?: return null
+        val providersArray = json.getAsJsonArray("providers") ?: return null
+        val firstProvider = providersArray.firstOrNull()?.asJsonObject ?: return null
+
+        val settingsConfig = firstProvider.getAsJsonObject("settingsConfig")
+        val env = settingsConfig?.getAsJsonObject("env")
+
+        return LocalProvider(
+            id = "cli-login",
+            name = "CLI Login",
+            authToken = env?.get("ANTHROPIC_AUTH_TOKEN")?.asString,
+            baseUrl = env?.get("ANTHROPIC_BASE_URL")?.asString,
+            sonnetModel = env?.get("ANTHROPIC_DEFAULT_SONNET_MODEL")?.asString,
+            opusModel = env?.get("ANTHROPIC_DEFAULT_OPUS_MODEL")?.asString
+                ?: env?.get("ANTHROPIC_OPUS_MODEL")?.asString,
+            maxModel = env?.get("ANTHROPIC_DEFAULT_MAX_MODEL")?.asString
+                ?: env?.get("ANTHROPIC_MAX_MODEL")?.asString
+        )
     }
 
     /**

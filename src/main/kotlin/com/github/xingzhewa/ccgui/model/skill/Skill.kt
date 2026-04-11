@@ -113,6 +113,100 @@ data class Skill(
 
     companion object {
         /**
+         * 从 Markdown 文件内容创建 Skill
+         *
+         * 解析格式:
+         * - Name: 第一行 # 标题
+         * - Description: 从内容中提取的简短描述
+         * - Category: 从文件名推断 (去掉前缀数字)
+         * - Prompt: 完整 Markdown 内容
+         *
+         * @param fileName 文件名 (用于分类推断)
+         * @param markdownContent Markdown 文件内容
+         * @return Skill 实例
+         */
+        fun fromMarkdown(fileName: String, markdownContent: String): Skill {
+            val lines = markdownContent.lines()
+
+            // 提取标题 (# 标题)
+            val name = lines.firstOrNull { it.startsWith("# ") }?.removePrefix("# ") ?: fileName
+
+            // 提取描述: 查找前几个段落,取非空非标题非代码块的内容
+            val description = extractDescription(lines)
+
+            // 从文件名推断分类
+            val category = inferCategory(fileName)
+
+            // 生成 ID: 从文件名提取,去掉前缀数字和扩展名
+            val id = fileName
+                .replace(Regex("^\\d+-"), "")
+                .replace(Regex("\\.md$"), "")
+                .replace("-", "_")
+                .let { if (it.isEmpty()) IdGenerator.skillId() else it }
+
+            return Skill(
+                id = "fs_$id",
+                name = name,
+                description = description,
+                icon = "📖",
+                category = category,
+                prompt = markdownContent
+            )
+        }
+
+        /**
+         * 从文件内容提取描述
+         */
+        private fun extractDescription(lines: List<String>): String {
+            val buffer = StringBuilder()
+            var inCodeBlock = false
+            var collectingDescription = false
+            var emptyLineCount = 0
+
+            for (line in lines.drop(1)) { // 跳过标题行
+                when {
+                    line.startsWith("```") -> inCodeBlock = !inCodeBlock
+                    inCodeBlock -> continue
+                    line.startsWith("#") -> break // 遇到子标题则停止
+                    line.isBlank() -> {
+                        emptyLineCount++
+                        if (collectingDescription && emptyLineCount >= 1) break
+                    }
+                    else -> {
+                        collectingDescription = true
+                        if (buffer.isNotEmpty() && buffer.last() != '\n') buffer.append(" ")
+                        buffer.append(line.trim())
+                        emptyLineCount = 0
+                    }
+                }
+                if (buffer.length > 200) break
+            }
+
+            return buffer.toString().take(200).let {
+                if (it.length == 200) "$it..." else it
+            }.ifEmpty { "No description available" }
+        }
+
+        /**
+         * 从文件名推断分类
+         */
+        private fun inferCategory(fileName: String): SkillCategory {
+            val lowerName = fileName.lowercase()
+            return when {
+                lowerName.contains("jcef") || lowerName.contains("lifecycle") -> SkillCategory.DEBUGGING
+                lowerName.contains("java") && lowerName.contains("js") || lowerName.contains("bridge") -> SkillCategory.CODE_GENERATION
+                lowerName.contains("event") -> SkillCategory.CODE_GENERATION
+                lowerName.contains("coroutine") || lowerName.contains("dispatcher") -> SkillCategory.PERFORMANCE
+                lowerName.contains("streaming") || lowerName.contains("protocol") -> SkillCategory.CODE_GENERATION
+                lowerName.contains("naming") || lowerName.contains("plugin") -> SkillCategory.DOCUMENTATION
+                lowerName.contains("build") || lowerName.contains("resource") -> SkillCategory.PERFORMANCE
+                lowerName.contains("pit") || lowerName.contains("sync") -> SkillCategory.CODE_REVIEW
+                lowerName.contains("readme") -> SkillCategory.DOCUMENTATION
+                else -> SkillCategory.CODE_GENERATION
+            }
+        }
+
+        /**
          * 创建代码生成 Skill
          */
         fun codeGeneration(name: String, description: String, prompt: String): Skill {

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -61,6 +62,7 @@ class SkillsManager(private val project: Project) : Disposable {
 
     init {
         loadBuiltinSkills()
+        loadSkillsFromFileSystem()
         loadSkillsFromStorage()
         log.info("SkillsManager initialized for project: ${project.name}")
     }
@@ -152,6 +154,49 @@ class SkillsManager(private val project: Project) : Disposable {
             log.info("Loaded $loadedCount custom skills from storage")
         } catch (e: Exception) {
             log.error("Failed to load skills from storage", e)
+        }
+    }
+
+    /**
+     * 从文件系统加载 Skills
+     *
+     * 从项目 `.claude/skills/` 目录读取 `.md` 文件,
+     * 解析 Markdown 格式的 Skill 定义。
+     *
+     * 保留原有 PropertiesComponent 加载作为兼容,
+     * 文件系统加载的 Skills 具有更高优先级。
+     */
+    private fun loadSkillsFromFileSystem() {
+        val skillsDir = File(project.basePath, ".claude/skills")
+        if (!skillsDir.exists() || !skillsDir.isDirectory) {
+            log.debug("Skills directory does not exist: ${skillsDir.absolutePath}")
+            return
+        }
+
+        try {
+            val mdFiles = skillsDir.listFiles { file ->
+                file.isFile && file.name.endsWith(".md") && file.name != "00-readme.md"
+            } ?: return
+
+            var loadedCount = 0
+            mdFiles.forEach { file ->
+                try {
+                    val content = file.readText()
+                    val skill = Skill.fromMarkdown(file.name, content)
+
+                    // 文件系统加载的 Skills 优先级高于存储的,
+                    // 但低于内置 Skills (避免覆盖内置 Skill)
+                    if (skill.id !in skills.keys) {
+                        addSkill(skill)
+                        loadedCount++
+                    }
+                } catch (e: Exception) {
+                    log.warn("Failed to load skill from file ${file.name}: ${e.message}")
+                }
+            }
+            log.info("Loaded $loadedCount skills from filesystem: ${skillsDir.absolutePath}")
+        } catch (e: Exception) {
+            log.error("Failed to load skills from filesystem", e)
         }
     }
 

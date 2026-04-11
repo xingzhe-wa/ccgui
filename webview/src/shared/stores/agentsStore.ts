@@ -18,6 +18,30 @@ interface AgentsStoreState {
   /** 正在运行的 Agent ID 集合 */
   runningAgentIds: Set<string>;
 
+  /** 活跃任务状态 */
+  activeTasks: Array<{
+    taskId: string;
+    name: string;
+    status: string;
+    currentStep: number;
+    totalSteps: number;
+    progress: number;
+  }>;
+
+  /** 活跃子代理 */
+  activeSubagents: Array<{
+    agentId: string;
+    agentName: string;
+    taskId: string;
+    startTime: number;
+  }>;
+
+  /** 更新活跃任务 */
+  setActiveTasks: (tasks: AgentsStoreState['activeTasks']) => void;
+
+  /** 更新活跃子代理 */
+  setActiveSubagents: (agents: AgentsStoreState['activeSubagents']) => void;
+
   /** 加载状态 */
   isLoading: boolean;
 
@@ -54,6 +78,8 @@ interface AgentsStoreState {
 export const useAgentsStore = create<AgentsStoreState>((set, get) => ({
   agents: [],
   runningAgentIds: new Set(),
+  activeTasks: [],
+  activeSubagents: [],
   isLoading: false,
   error: null,
 
@@ -98,6 +124,25 @@ export const useAgentsStore = create<AgentsStoreState>((set, get) => ({
       set({ agents, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
+    }
+  },
+
+  setActiveTasks: (tasks) => set({ activeTasks: tasks }),
+
+  setActiveSubagents: (agents) => set({ activeSubagents: agents }),
+
+  /** 更新活跃任务（从后端获取） */
+  refreshActiveTasks: async () => {
+    try {
+      const result = await window.ccBackend?.getTaskStatus();
+      if (result?.tasks) {
+        set({ activeTasks: result.tasks });
+      }
+      if (result?.activeSubagents) {
+        set({ activeSubagents: result.activeSubagents });
+      }
+    } catch (error) {
+      console.error('Failed to refresh agent tasks:', error);
     }
   }
 }));

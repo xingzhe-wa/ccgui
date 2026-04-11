@@ -4,11 +4,13 @@
  * 展示 Skills 列表，支持网格布局。
  */
 
-import { memo } from 'react';
-import { FileX } from 'lucide-react';
+import { memo, useState, useCallback } from 'react';
+import { FileX, Upload } from 'lucide-react';
 import type { Skill } from '@/shared/types';
 import { SkillCard } from './SkillCard';
+import { SkillImportDialog } from './SkillImportDialog';
 import { cn } from '@/shared/utils/cn';
+import { Button } from '@/shared/components/ui/button/Button';
 
 export interface SkillsListProps {
   /** Skills 列表 */
@@ -25,6 +27,10 @@ export interface SkillsListProps {
   onExecute?: (skill: Skill) => void;
   /** 复制 Skill 回调 */
   onDuplicate?: (skill: Skill) => void;
+  /** 导出 Skill 回调 */
+  onExport?: (skill: Skill) => void;
+  /** 导入成功回调 */
+  onImportSuccess?: (count: number) => void;
   className?: string;
 }
 
@@ -39,8 +45,19 @@ export const SkillsList = memo<SkillsListProps>(function SkillsList({
   onDelete,
   onExecute,
   onDuplicate,
+  onExport,
+  onImportSuccess,
   className
 }: SkillsListProps) {
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const handleImportSuccess = useCallback(
+    (count: number) => {
+      onImportSuccess?.(count);
+    },
+    [onImportSuccess]
+  );
+
   if (skills.length === 0) {
     return (
       <div className={cn('flex flex-col items-center justify-center py-12 text-center', className)}>
@@ -52,19 +69,53 @@ export const SkillsList = memo<SkillsListProps>(function SkillsList({
   }
 
   return (
-    <div className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4', className)}>
-      {skills.map((skill) => (
-        <SkillCard
-          key={skill.id}
-          skill={skill}
-          isSelected={skill.id === selectedId}
-          onClick={() => onSelect?.(skill)}
-          onEdit={() => onEdit?.(skill)}
-          onDelete={() => onDelete?.(skill.id)}
-          onExecute={() => onExecute?.(skill)}
-          onDuplicate={() => onDuplicate?.(skill)}
-        />
-      ))}
-    </div>
+    <>
+      <div className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4', className)}>
+        {skills.map((skill) => (
+          <SkillCard
+            key={skill.id}
+            skill={skill}
+            isSelected={skill.id === selectedId}
+            onClick={() => onSelect?.(skill)}
+            onEdit={() => onEdit?.(skill)}
+            onDelete={() => onDelete?.(skill.id)}
+            onExecute={() => onExecute?.(skill)}
+            onDuplicate={() => onDuplicate?.(skill)}
+            onExport={() => onExport?.(skill)}
+          />
+        ))}
+      </div>
+
+      <SkillImportDialog
+        isOpen={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+        onSuccess={handleImportSuccess}
+      />
+    </>
   );
 });
+
+// 导出导入对话框状态管理组件（供父组件使用）
+export function useSkillsImportDialog() {
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const openImportDialog = useCallback(() => setShowImportDialog(true), []);
+  const closeImportDialog = useCallback(() => setShowImportDialog(false), []);
+
+  const ImportButton = useCallback(
+    ({ className }: { className?: string }) => (
+      <Button variant="outline" size="sm" onClick={openImportDialog} className={className}>
+        <Upload className="h-4 w-4 mr-2" />
+        导入
+      </Button>
+    ),
+    [openImportDialog]
+  );
+
+  return {
+    showImportDialog,
+    openImportDialog,
+    closeImportDialog,
+    ImportButton
+  };
+}

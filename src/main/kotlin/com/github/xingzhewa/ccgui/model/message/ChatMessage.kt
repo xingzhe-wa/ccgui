@@ -56,6 +56,8 @@ data class MessageMetadata(
  * @param references 引用列表
  * @param metadata 元数据
  * @param status 消息状态
+ * @param version 消息版本号（用于快照和回滚）
+ * @param parentVersion 父版本号（指向创建此版本的消息版本）
  */
 data class ChatMessage(
     val id: String = IdGenerator.messageId(),
@@ -65,7 +67,9 @@ data class ChatMessage(
     val attachments: List<ContentPart> = emptyList(),
     val references: List<MessageReference> = emptyList(),
     val metadata: MessageMetadata = MessageMetadata(),
-    val status: MessageStatus = MessageStatus.COMPLETED
+    val status: MessageStatus = MessageStatus.COMPLETED,
+    val version: Long = 0L,
+    val parentVersion: Long? = null
 ) {
 
     /**
@@ -103,7 +107,67 @@ data class ChatMessage(
      */
     val isFileReference: Boolean get() = MessageContentStorage.isFileReference(content)
 
+    /**
+     * 是否为快照版本
+     */
+    val isSnapshot: Boolean get() = parentVersion != null
+
+    /**
+     * 创建新版本的消息
+     *
+     * @param newVersion 新版本号
+     * @return 新版本消息
+     */
+    fun createNewVersion(newVersion: Long): ChatMessage {
+        return copy(
+            version = newVersion,
+            parentVersion = version.takeIf { it > 0 },
+            timestamp = System.currentTimeMillis()
+        )
+    }
+
+    /**
+     * 将当前消息标记为快照
+     *
+     * @param parentVersion 父版本号
+     * @return 快照消息
+     */
+    fun markAsSnapshot(parentVersion: Long): ChatMessage {
+        return copy(parentVersion = parentVersion)
+    }
+
     companion object {
+        /**
+         * 消息引用格式正则表达式
+         * 匹配格式: [msg_xxx] 或 [sess_xxx]
+         */
+        private val MESSAGE_REFERENCE_PATTERN = Regex("""\[(msg_[a-zA-Z0-9_]+|sess_[a-zA-Z0-9_]+)\]""")
+
+        /**
+         * 从内容中提取消息引用ID
+         *
+         * 检测 `[messageId]` 格式并返回消息ID列表
+         *
+         * @param content 消息内容
+         * @return 消息ID列表
+         */
+        fun extractMessageIds(content: String): List<String> {
+            return MESSAGE_REFERENCE_PATTERN.findAll(content)
+                .map { it.groupValues[1] }
+                .distinct()
+                .toList()
+        }
+
+        /**
+         * 检查内容是否包含消息引用
+         *
+         * @param content 消息内容
+         * @return true if content contains message references
+         */
+        fun hasMessageReferences(content: String): Boolean {
+            return MESSAGE_REFERENCE_PATTERN.containsMatchIn(content)
+        }
+
         /**
          * 创建用户消息
          */
@@ -167,7 +231,9 @@ data class ChatMessage(
                             cost = it.get("cost")?.asDouble
                         )
                     } ?: MessageMetadata(),
-                    status = MessageStatus.valueOf(json.get("status")?.asString ?: "COMPLETED")
+                    status = MessageStatus.valueOf(json.get("status")?.asString ?: "COMPLETED"),
+                    version = json.get("version")?.asLong ?: 0L,
+                    parentVersion = json.get("parentVersion")?.asLong?.takeIf { it > 0L }
                 )
             } catch (e: Exception) {
                 null
@@ -209,6 +275,8 @@ data class ChatMessage(
                 metadata.cost?.let { addProperty("cost", it) }
             })
             addProperty("status", status.name)
+            addProperty("version", version)
+            parentVersion?.let { addProperty("parentVersion", it) }
         }
     }
 }

@@ -212,8 +212,28 @@ class ConfigManager(private val project: Project) : Disposable {
                 return ModelConfig(provider = "disabled", model = "")
             }
             SpecialProviderIds.CLI_LOGIN -> {
-                // CLI Login 暂未实现，使用默认配置
-                log.warn("CLI_LOGIN profile not yet implemented")
+                // 从 CLI Login 获取配置
+                val cliProvider = LocalSettingsReader.getCliProvider()
+                if (cliProvider != null) {
+                    // 推断 provider 类型
+                    val provider = when {
+                        cliProvider.baseUrl?.contains("anthropic.com") == true -> "anthropic"
+                        cliProvider.baseUrl?.contains("openai.com") == true -> "openai"
+                        cliProvider.baseUrl?.contains("deepseek") == true -> "deepseek"
+                        else -> "anthropic"
+                    }
+                    return ModelConfig(
+                        provider = provider,
+                        model = cliProvider.sonnetModel ?: "claude-sonnet-4-20250514",
+                        apiKey = cliProvider.authToken,
+                        baseUrl = cliProvider.baseUrl,
+                        sonnetModel = cliProvider.sonnetModel,
+                        opusModel = cliProvider.opusModel,
+                        maxModel = cliProvider.maxModel
+                    )
+                }
+                // 如果 CLI 未登录或解析失败，返回默认配置
+                log.warn("CLI_LOGIN profile selected but CLI is not logged in")
                 return config.modelConfig
             }
         }
@@ -284,6 +304,13 @@ class ConfigManager(private val project: Project) : Disposable {
             profiles.add(ProviderProfile.createSpecialProvider(SpecialProviderIds.LOCAL_SETTINGS))
             changed = true
             log.info("Added LOCAL_SETTINGS profile")
+        }
+
+        // 确保 CLI_LOGIN profile 存在
+        if (profiles.none { it.id == SpecialProviderIds.CLI_LOGIN }) {
+            profiles.add(ProviderProfile.createSpecialProvider(SpecialProviderIds.CLI_LOGIN))
+            changed = true
+            log.info("Added CLI_LOGIN profile")
         }
 
         // 如果没有激活的 profile 且本地设置存在，自动激活 LOCAL_SETTINGS

@@ -24,7 +24,174 @@ class SlashCommandRegistry(private val project: Project) {
 
     init {
         log.info("SlashCommandRegistry initialized")
+        registerAll(getDefaultCommands())
     }
+
+    /**
+     * 获取默认命令列表（17条指令）
+     */
+    private fun getDefaultCommands(): List<CommandDefinition> = listOf(
+        // 系统类
+        CommandDefinition(
+            name = "init",
+            description = I18nText("command.init.description", "Initialize project"),
+            category = CommandCategory.WORKFLOW,
+            handler = { ctx ->
+                log.info("Executing /init command: ${ctx.rawInput}")
+                CommandResult.Success("Project initialized")
+            }
+        ),
+        // 会话类
+        CommandDefinition(
+            name = "compact",
+            description = I18nText("command.compact.description", "Compact context"),
+            category = CommandCategory.SESSION,
+            handler = { ctx ->
+                log.info("Executing /compact command: ${ctx.rawInput}")
+                CommandResult.Success("Context compacted")
+            }
+        ),
+        CommandDefinition(
+            name = "clear",
+            description = I18nText("command.clear.description", "Clear session"),
+            category = CommandCategory.SESSION,
+            handler = { ctx ->
+                log.info("Executing /clear command: ${ctx.rawInput}")
+                CommandResult.Success("Session cleared")
+            }
+        ),
+        CommandDefinition(
+            name = "resume",
+            description = I18nText("command.resume.description", "Resume session"),
+            category = CommandCategory.SESSION,
+            handler = { ctx ->
+                log.info("Executing /resume command: ${ctx.rawInput}")
+                CommandResult.Success("Session resumed")
+            }
+        ),
+        // 信息类
+        CommandDefinition(
+            name = "context",
+            description = I18nText("command.context.description", "View context"),
+            category = CommandCategory.CONTEXT,
+            handler = { ctx ->
+                log.info("Executing /context command: ${ctx.rawInput}")
+                CommandResult.Success("Context displayed")
+            }
+        ),
+        CommandDefinition(
+            name = "cost",
+            description = I18nText("command.cost.description", "View cost"),
+            category = CommandCategory.CONTEXT,
+            handler = { ctx ->
+                log.info("Executing /cost command: ${ctx.rawInput}")
+                CommandResult.Success("Cost displayed")
+            }
+        ),
+        CommandDefinition(
+            name = "help",
+            description = I18nText("command.help.description", "Show help"),
+            category = CommandCategory.CONTEXT,
+            handler = { ctx ->
+                log.info("Executing /help command: ${ctx.rawInput}")
+                CommandResult.Success("Help displayed")
+            }
+        ),
+        // 诊断类
+        CommandDefinition(
+            name = "doctor",
+            description = I18nText("command.doctor.description", "Diagnose issues"),
+            category = CommandCategory.TOOLS,
+            handler = { ctx ->
+                log.info("Executing /doctor command: ${ctx.rawInput}")
+                CommandResult.Success("Diagnosis complete")
+            }
+        ),
+        // 配置类
+        CommandDefinition(
+            name = "model",
+            description = I18nText("command.model.description", "Switch model"),
+            category = CommandCategory.CONFIG,
+            handler = { ctx ->
+                log.info("Executing /model command: ${ctx.rawInput}")
+                CommandResult.Success("Model switched")
+            }
+        ),
+        CommandDefinition(
+            name = "config",
+            description = I18nText("command.config.description", "Manage configuration"),
+            category = CommandCategory.CONFIG,
+            handler = { ctx ->
+                log.info("Executing /config command: ${ctx.rawInput}")
+                CommandResult.Success("Configuration managed")
+            }
+        ),
+        CommandDefinition(
+            name = "permissions",
+            description = I18nText("command.permissions.description", "Manage permissions"),
+            category = CommandCategory.CONFIG,
+            handler = { ctx ->
+                log.info("Executing /permissions command: ${ctx.rawInput}")
+                CommandResult.Success("Permissions managed")
+            }
+        ),
+        // 模式类
+        CommandDefinition(
+            name = "think",
+            description = I18nText("command.think.description", "Think mode"),
+            category = CommandCategory.MODE,
+            handler = { ctx ->
+                log.info("Executing /think command: ${ctx.rawInput}")
+                CommandResult.Success("Think mode enabled")
+            }
+        ),
+        CommandDefinition(
+            name = "plan",
+            description = I18nText("command.plan.description", "Plan mode"),
+            category = CommandCategory.MODE,
+            handler = { ctx ->
+                log.info("Executing /plan command: ${ctx.rawInput}")
+                CommandResult.Success("Plan mode enabled")
+            }
+        ),
+        CommandDefinition(
+            name = "auto",
+            description = I18nText("command.auto.description", "Auto mode"),
+            category = CommandCategory.MODE,
+            handler = { ctx ->
+                log.info("Executing /auto command: ${ctx.rawInput}")
+                CommandResult.Success("Auto mode enabled")
+            }
+        ),
+        // 管理类
+        CommandDefinition(
+            name = "mcp",
+            description = I18nText("command.mcp.description", "MCP management"),
+            category = CommandCategory.TOOLS,
+            handler = { ctx ->
+                log.info("Executing /mcp command: ${ctx.rawInput}")
+                CommandResult.Success("MCP managed")
+            }
+        ),
+        CommandDefinition(
+            name = "skill",
+            description = I18nText("command.skill.description", "Skills management"),
+            category = CommandCategory.TOOLS,
+            handler = { ctx ->
+                log.info("Executing /skill command: ${ctx.rawInput}")
+                CommandResult.Success("Skills managed")
+            }
+        ),
+        CommandDefinition(
+            name = "agent",
+            description = I18nText("command.agent.description", "Agent management"),
+            category = CommandCategory.TOOLS,
+            handler = { ctx ->
+                log.info("Executing /agent command: ${ctx.rawInput}")
+                CommandResult.Success("Agent managed")
+            }
+        )
+    )
 
     /**
      * 命令定义

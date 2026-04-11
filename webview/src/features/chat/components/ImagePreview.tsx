@@ -9,9 +9,19 @@ interface ImagePreviewProps {
   file: File;
   onRemove?: () => void;
   className?: string;
+  /** 压缩进度 (0-100)，undefined 表示无进度 */
+  progress?: number;
+  /** 是否正在压缩 */
+  isCompressing?: boolean;
 }
 
-export const ImagePreview = memo<ImagePreviewProps>(function ImagePreview({ file, onRemove, className }) {
+export const ImagePreview = memo<ImagePreviewProps>(function ImagePreview({
+  file,
+  onRemove,
+  className,
+  progress,
+  isCompressing
+}) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
 
@@ -22,13 +32,21 @@ export const ImagePreview = memo<ImagePreviewProps>(function ImagePreview({ file
   return (
     <div className={cn('relative group', className)}>
       <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-background-secondary">
-        {!isLoaded && !error && (
+        {/* Loading or compressing state */}
+        {(!isLoaded && !error) || isCompressing ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            {isCompressing ? (
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                {progress !== undefined && (
+                  <span className="text-[10px] text-muted-foreground">{progress}%</span>
+                )}
+              </div>
+            ) : (
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            )}
           </div>
-        )}
-
-        {error ? (
+        ) : error ? (
           <div className="absolute inset-0 flex items-center justify-center text-foreground-muted">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -71,9 +89,11 @@ export const ImagePreview = memo<ImagePreviewProps>(function ImagePreview({ file
         </button>
 
         {/* File name tooltip */}
-        <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 truncate">
-          <span className="text-[10px] text-white/80 truncate">{file.name}</span>
-        </div>
+        {!isCompressing && (
+          <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 truncate">
+            <span className="text-[10px] text-white/80 truncate">{file.name}</span>
+          </div>
+        )}
       </div>
     </div>
   );

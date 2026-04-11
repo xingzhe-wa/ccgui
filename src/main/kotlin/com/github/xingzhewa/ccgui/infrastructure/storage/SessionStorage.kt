@@ -49,7 +49,9 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
     data class State(
         var sessions: String = "[]",
         var activeSessionId: String? = null,
-        var version: Int = 1
+        var version: Long = 1L,
+        /** 消息版本快照存储: version -> snapshot JSON */
+        var messageSnapshots: String = "{}"
     )
 
     private var state = State()
@@ -59,12 +61,26 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
      */
     private val sessionsCache = ConcurrentHashMap<String, ChatSession>()
 
+    /**
+     * 快照缓存: version -> (sessionId -> ChatSession snapshot)
+     */
+    private val snapshotsCache = ConcurrentHashMap<Long, Map<String, ChatSession>>()
+
+    /**
+     * 消息文件管理器引用
+     * 用于处理大消息内容的文件存储
+     */
+    private val messageFileManager: MessageFileManager by lazy {
+        MessageFileManager.getInstance(project)
+    }
+
     override fun getState(): State = state
 
     override fun loadState(state: State) {
         this.state = state
         // 重建缓存
         rebuildCache()
+        rebuildSnapshotsCache()
     }
 
     /**
@@ -78,6 +94,34 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
             sessionsCache[session.id] = session
         }
         logger.info("Rebuilt session cache with ${sessionsCache.size} sessions")
+    }
+
+    /**
+     * 重建快照缓存
+     */
+    private fun rebuildSnapshotsCache() {
+        snapshotsCache.clear()
+        if (state.messageSnapshots.isEmpty() || state.messageSnapshots == "{}") {
+            return
+        }
+        try {
+            val jsonObj = JsonUtils.parseObject(state.messageSnapshots) ?: return
+            jsonObj.entrySet().forEach { entry ->
+                val version = entry.key.toLongOrNull() ?: return@forEach
+                val sessionsMap = mutableMapOf<String, ChatSession>()
+                val sessionsObj = entry.value.asJsonObject
+                sessionsObj.entrySet().forEach { sessionEntry ->
+                    val session = ChatSession.fromJson(sessionEntry.value.asJsonObject)
+                    if (session != null) {
+                        sessionsMap[sessionEntry.key] = session
+                    }
+                }
+                snapshotsCache[version] = sessionsMap
+            }
+            logger.info("Rebuilt snapshots cache with ${snapshotsCache.size} versions")
+        } catch (e: Exception) {
+            logger.warn("Failed to rebuild snapshots cache: ${e.message}")
+        }
     }
 
     /**
@@ -254,6 +298,179 @@ class SessionStorage(private val project: Project) : PersistentStateComponent<Se
      */
     fun flush() {
         persistSessions()
+        persistSnapshots()
+    }
+
+    // ==================== 快照管理 ====================
+
+    /**
+     * 持久化快照到存储
+     */
+    private fun persistSnapshots() {
+        val jsonObj = com.google.gson.JsonObject()
+        snapshotsCache.forEach { (version, sessionsMap) ->
+            val sessionsObj = com.google.gson.JsonObject()
+            sessionsMap.forEach { (sessionId, session) ->
+                sessionsObj.add(sessionId, session.toJson())
+            }
+            jsonObj.add(version.toString(), sessionsObj)
+        }
+        state.messageSnapshots = JsonUtils.toJson(jsonObj)
+    }
+
+    /**
+     * 创建当前会话状态的快照
+     *
+     * @return 创建的快照版本号
+     */
+    fun createSnapshot(): Long {
+        val version = state.version
+        // 创建当前所有会话的快照
+        val snapshot = sessionsCache.values.associate { it.id to it }
+        snapshotsCache[version] = snapshot
+        state.version = version + 1
+        persistSnapshots()
+        persistSessions()
+        logger.info("Created snapshot at version $version with ${snapshot.size} sessions")
+        return version
+    }
+
+    /**
+     * 回滚到指定版本
+     *
+     * @param version 目标版本号
+     * @return true if rollback successful, false if version not found
+     */
+    fun rollbackTo(version: Long): Boolean {
+        val snapshot = snapshotsCache[version]
+        if (snapshot == null) {
+            logger.warn("Snapshot version $version not found")
+            return false
+        }
+        // 恢复快照中的会话
+        snapshot.forEach { (sessionId, session) ->
+            sessionsCache[sessionId] = session
+        }
+        // 删除比目标版本更新的快照
+        val versionsToRemove = snapshotsCache.keys.filter { it > version }.toList()
+        versionsToRemove.forEach { snapshotsCache.remove(it) }
+        // 更新当前版本号
+        state.version = version + 1
+        persistSnapshots()
+        persistSessions()
+        logger.info("Rolled back to version $version, restored ${snapshot.size} sessions")
+        return true
+    }
+
+    /**
+     * 获取可用的快照版本列表
+     *
+     * @return 版本号列表（按版本号升序）
+     */
+    fun getSnapshotVersions(): List<Long> {
+        return snapshotsCache.keys.sorted()
+    }
+
+    /**
+     * 获取指定版本的快照会话
+     *
+     * @param version 快照版本号
+     * @return 会话映射，如果版本不存在则返回 null
+     */
+    fun getSnapshot(version: Long): Map<String, ChatSession>? {
+        return snapshotsCache[version]
+    }
+
+    /**
+     * 获取当前版本号
+     *
+     * @return 当前版本号
+     */
+    fun getCurrentVersion(): Long {
+        return state.version - 1
+    }
+
+    /**
+     * 删除指定版本的快照
+     *
+     * @param version 要删除的版本号
+     */
+    fun deleteSnapshot(version: Long) {
+        if (snapshotsCache.remove(version) != null) {
+            persistSnapshots()
+            logger.info("Deleted snapshot version $version")
+        }
+    }
+
+    /**
+     * 清空所有快照
+     */
+    fun clearSnapshots() {
+        snapshotsCache.clear()
+        state.version = 1L
+        persistSnapshots()
+        logger.info("Cleared all snapshots")
+    }
+
+    // ==================== 大消息内容管理 ====================
+
+    /**
+     * 准备消息内容进行存储
+     *
+     * 如果消息内容超过阈值，自动保存到文件并返回文件引用
+     *
+     * @param sessionId 会话 ID
+     * @param messageId 消息 ID
+     * @param content 消息内容
+     * @return Pair(是否使用文件引用, 内容/引用)
+     */
+    suspend fun prepareMessageForStorage(sessionId: String, messageId: String, content: String): Pair<Boolean, String> {
+        if (content.length >= MessageFileManager.SMALL_MESSAGE_THRESHOLD) {
+            val fileRef = messageFileManager.saveMessage(sessionId, messageId, content)
+            if (fileRef != null) {
+                logger.debug("Message $messageId saved to file (${content.length} chars)")
+                return Pair(true, fileRef)
+            }
+            logger.warn("Failed to save message $messageId to file, storing inline")
+        }
+        return Pair(false, content)
+    }
+
+    /**
+     * 解析消息内容
+     *
+     * 如果内容是文件引用，自动从文件加载
+     *
+     * @param content 消息内容（可能是文件引用）
+     * @return 实际消息内容
+     */
+    suspend fun resolveMessageContent(content: String): String {
+        return messageFileManager.resolveContent(content)
+    }
+
+    /**
+     * 处理会话中所有消息的内容解析
+     *
+     * 在加载会话后调用，将所有文件引用解析为实际内容
+     *
+     * @param session 包含消息的会话
+     * @return 解析后的会话
+     */
+    suspend fun resolveSessionMessages(session: ChatSession): ChatSession {
+        val resolvedMessages = session.messages.map { message ->
+            val resolvedContent = resolveMessageContent(message.content)
+            message.copy(content = resolvedContent)
+        }
+        return session.copy(messages = resolvedMessages)
+    }
+
+    /**
+     * 删除会话的所有消息文件
+     *
+     * @param sessionId 会话 ID
+     */
+    suspend fun deleteSessionMessageFiles(sessionId: String) {
+        messageFileManager.deleteSessionMessages(sessionId)
     }
 
     companion object {

@@ -248,6 +248,14 @@ class JavaBridge {
     return this.invoke('deleteSkill', { skillId });
   }
 
+  async importSkill(json: string): Promise<{ success: boolean; count?: number; error?: string }> {
+    return this.invoke('importSkill', { json });
+  }
+
+  async exportSkill(skillId: string): Promise<{ success: boolean; json?: string; error?: string }> {
+    return this.invoke('exportSkill', { skillId });
+  }
+
   async startAgent(agentId: string, task: any): Promise<void> {
     return this.invoke('startAgent', { agentId, task });
   }

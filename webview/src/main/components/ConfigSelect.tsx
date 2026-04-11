@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Settings, Bot, RefreshCw, Brain, ChevronRight, Plus, Info, Check } from 'lucide-react';
 import { useChatConfigStore, type ConversationMode } from '@/shared/stores/chatConfigStore';
 import { useAgentsStore } from '@/shared/stores/agentsStore';
@@ -24,6 +25,8 @@ const THINKING_MODES: { mode: ConversationMode; label: string; icon: typeof Brai
 export const ConfigSelect = memo<ConfigSelectProps>(function ConfigSelect({
   className
 }) {
+  const navigate = useNavigate();
+
   const {
     currentAgentId,
     setCurrentAgent,
@@ -93,8 +96,8 @@ export const ConfigSelect = memo<ConfigSelectProps>(function ConfigSelect({
     setIsOpen(false);
     setActiveSubmenu('none');
     // 打开 Agent 设置页面
-    window.location.hash = '/tools?tab=agents';
-  }, []);
+    navigate('/tools?tab=agents');
+  }, [navigate]);
 
   const handleThinkingSelect = useCallback((mode: ConversationMode) => {
     setConversationMode(mode);

@@ -9,21 +9,21 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Tool Window -->
+        <!-- Tool Window (按需创建) -->
         <toolWindow
             factoryClass="com.github.xingzhewa.ccgui.toolWindow.MyToolWindowFactory"
             id="CCGUI"
             key="tool.window.name"
             icon="META-INF/icons/ccgui_logo_13x13.png"/>
 
-        <!-- Project Services -->
-        <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.bridge.BridgeManager"/>
-
-        <projectService
+        <!-- Application Services (延迟加载) - 使用 by lazy 实现按需加载 -->
+        <applicationService
             serviceImplementation="com.github.xingzhewa.ccgui.config.CCGuiConfig"/>
 
-        <!-- SDK Services (Phase 2.5) -->
+        <applicationService
+            serviceImplementation="com.github.xingzhewa.ccgui.bridge.BridgeManager"/>
+
+        <!-- SDK Services (Phase 2.5) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient"/>
         <projectService
@@ -31,7 +31,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.SdkPermissionHandler"/>
 
-        <!-- Core Services (Phase 3) -->
+        <!-- Core Services (Phase 3) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.orchestrator.ChatOrchestrator"/>
         <projectService
@@ -43,7 +43,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.config.ConfigManager"/>
 
-        <!-- Feature Services (Phase 4) -->
+        <!-- Feature Services (Phase 4) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine"/>
         <projectService
@@ -53,7 +53,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.task.TaskProgressTracker"/>
 
-        <!-- Ecosystem Services (Phase 5) -->
+        <!-- Ecosystem Services (Phase 5) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.skill.SkillsManager"/>
         <projectService
@@ -67,7 +67,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.mcp.ScopeManager"/>
 
-        <!-- Infrastructure Services (PersistentStateComponent) -->
+        <!-- Infrastructure Services (PersistentStateComponent) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.ConfigStorage"/>
         <projectService
@@ -77,7 +77,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.StorageService"/>
 
-        <!-- Feature Services (Phase 4+) -->
+        <!-- Feature Services (Phase 4+) - 延迟加载 -->
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.usage.UsageService"/>
         <projectService
@@ -91,7 +91,7 @@
         <projectService
             serviceImplementation="com.github.xingzhewa.ccgui.application.config.LocaleConfigManager"/>
 
-        <!-- Startup -->
+        <!-- Startup (按需执行) -->
         <postStartupActivity
             implementation="com.github.xingzhewa.ccgui.startup.MyProjectActivity"/>
     </extensions>

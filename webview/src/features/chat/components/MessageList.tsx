@@ -1,8 +1,12 @@
 /**
  * MessageList - 虚拟滚动消息列表
+ *
+ * 性能优化：
+ * - 使用 useRef 追踪滚动状态，避免不必要的自动滚动
+ * - 只有当新消息追加到底部且用户没有主动滚动时才自动滚动
  */
 
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useEffect, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/shared/utils/cn';
 import { MessageItem } from './MessageItem';
@@ -33,20 +37,73 @@ export const MessageList = memo<MessageListProps>(function MessageList({
   className
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef<number>(messages.length);
+  const isUserScrollingRef = useRef<boolean>(false);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ESTIMATED_MESSAGE_HEIGHT,
-    overscan: OVERSCAN
+    overscan: OVERSCAN,
+    // 禁用默认的 measure 方法，手动控制
+    measureElement: undefined
   });
 
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (messages.length > 0) {
-      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+  // 检查用户是否在主动滚动（通过监听 scroll 事件）
+  const handleScroll = useCallback(() => {
+    if (!parentRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = parentRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+
+    // 如果用户向上滚动，设置标志
+    if (!isAtBottom) {
+      isUserScrollingRef.current = true;
     }
+
+    // 清除之前的超时，重新设置
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    // 1秒后重置用户滚动标志
+    scrollTimeoutRef.current = setTimeout(() => {
+      isUserScrollingRef.current = false;
+    }, 1000);
+  }, []);
+
+  // 清理超时
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-scroll to bottom on new messages
+  // 只有当用户没有主动滚动时才自动滚动
+  useEffect(() => {
+    const prevLength = prevMessagesLengthRef.current;
+    const newLength = messages.length;
+
+    // 只有当新消息是追加（不是插入）且用户没有主动滚动时才滚动
+    if (newLength > prevLength && !isUserScrollingRef.current) {
+      virtualizer.scrollToIndex(newLength - 1, { align: 'end' });
+    }
+
+    prevMessagesLengthRef.current = newLength;
   }, [messages.length, virtualizer]);
+
+  // 监听滚动事件
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+
+    el.addEventListener('scroll', handleScroll);
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   const items = virtualizer.getVirtualItems();
 

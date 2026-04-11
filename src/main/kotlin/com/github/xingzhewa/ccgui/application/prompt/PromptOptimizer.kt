@@ -27,6 +27,8 @@ import kotlinx.coroutines.withContext
  * - 相关信息注入：注入项目结构、最近文件等信息
  * - 会话历史整合：智能整合历史对话
  * - 代码引用处理：处理代码块引用和格式化
+ * - 模板匹配：根据关键词匹配预设模板（如"/explain", "/review", "/test"）
+ * - 代码检测：识别代码语言、格式化为代码块
  *
  * @param project IntelliJ项目实例
  */
@@ -35,6 +37,240 @@ class PromptOptimizer(private val project: Project) {
 
     private val log = logger<PromptOptimizer>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // ==================== 提示词模板 ====================
+
+    /**
+     * 提示词模板枚举
+     *
+     * 对应 QuickActionsPanel 中的快捷操作
+     */
+    enum class PromptTemplate(val keyword: String, val description: String, val template: String) {
+        EXPLAIN(
+            keyword = "/explain",
+            description = "解释代码逻辑",
+            template = """请解释以下代码的功能和实现原理：
+
+```{language}
+{code}
+```
+
+要求：
+- 说明代码的整体功能
+- 解释关键逻辑和算法
+- 指出需要注意的重点"""
+        ),
+        REVIEW(
+            keyword = "/review",
+            description = "代码质量审查",
+            template = """请对以下代码进行质量审查：
+
+```{language}
+{code}
+```
+
+要求：
+- 指出代码存在的问题和风险
+- 提出改进建议
+- 评估代码的可读性、可维护性和性能"""
+        ),
+        TEST(
+            keyword = "/test",
+            description = "生成单元测试",
+            template = """请为以下代码生成单元测试：
+
+```{language}
+{code}
+```
+
+要求：
+- 使用 {testFramework} 框架
+- 覆盖主要功能路径
+- 包含边界条件测试
+- 测试代码应该可以直接运行"""
+        ),
+        OPTIMIZE(
+            keyword = "/optimize",
+            description = "性能优化建议",
+            template = """请对以下代码进行性能优化：
+
+```{language}
+{code}
+```
+
+要求：
+- 识别性能瓶颈
+- 提供具体的优化方案
+- 给出优化前后的对比（如有可能）"""
+        ),
+        DEBUG(
+            keyword = "/debug",
+            description = "添加调试代码",
+            template = """请为以下代码添加调试代码：
+
+```{language}
+{code}
+```
+
+要求：
+- 添加合适的日志输出
+- 包含错误处理和异常捕获
+- 便于问题定位和追踪"""
+        ),
+        POLISH(
+            keyword = "/polish",
+            description = "优化代码表达",
+            template = """请优化以下代码的表达方式：
+
+```{language}
+{code}
+```
+
+要求：
+- 提高代码可读性
+- 遵循最佳实践和编码规范
+- 保持原有功能不变"""
+        ),
+        TRANSLATE(
+            keyword = "/translate",
+            description = "中英文互转",
+            template = """请翻译以下内容：
+
+{content}
+
+要求：
+- 保持原文格式
+- 翻译准确、流畅
+- 符合目标语言的表达习惯"""
+        ),
+        REFACTOR(
+            keyword = "/refactor",
+            description = "代码重构",
+            template = """请对以下代码进行重构：
+
+```{language}
+{code}
+```
+
+要求：
+- 改善代码结构
+- 提高可维护性
+- 保持功能不变
+- 解释重构的动机和效果"""
+        );
+
+        companion object {
+            /**
+             * 根据关键词查找匹配的模板
+             */
+            fun findByKeyword(keyword: String): PromptTemplate? {
+                val normalizedKeyword = keyword.trim().lowercase()
+                return entries.find { it.keyword == normalizedKeyword }
+            }
+
+            /**
+             * 检查输入是否包含模板关键词
+             */
+            fun matchTemplate(input: String): PromptTemplate? {
+                val trimmed = input.trim()
+                // 优先精确匹配
+                entries.forEach { template ->
+                    if (trimmed.startsWith(template.keyword, ignoreCase = true)) {
+                        return template
+                    }
+                }
+                return null
+            }
+        }
+    }
+
+    /**
+     * 代码语言检测结果
+     */
+    data class CodeLanguageDetection(
+        val language: String,
+        val confidence: Double,
+        val isDetected: Boolean
+    )
+
+    /**
+     * 提示词上下文（文档规定的接口）
+     *
+     * 包含优化所需的全部上下文信息
+     */
+    data class PromptContext(
+        /** 当前项目信息 */
+        val projectInfo: ProjectInfo = ProjectInfo(),
+        /** 选中的代码（来自编辑器） */
+        val selectedCode: SelectedCode? = null,
+        /** 相关文件列表 */
+        val relatedFiles: List<RelatedFile> = emptyList(),
+        /** 对话历史摘要 */
+        val conversationHistory: ConversationSummary = ConversationSummary(),
+        /** 原始输入 */
+        val originalInput: String = "",
+        /** 额外元数据 */
+        val metadata: Map<String, Any> = emptyMap()
+    ) {
+        /**
+         * 项目信息
+         */
+        data class ProjectInfo(
+            val name: String = "",
+            val path: String = "",
+            val language: String = "",
+            val framework: String = ""
+        )
+
+        /**
+         * 选中的代码
+         */
+        data class SelectedCode(
+            val code: String,
+            val language: String = "",
+            val filePath: String = "",
+            val startLine: Int = 0,
+            val endLine: Int = 0
+        )
+
+        /**
+         * 相关文件
+         */
+        data class RelatedFile(
+            val path: String,
+            val content: String,
+            val relevance: Double = 0.0
+        )
+
+        /**
+         * 对话历史摘要
+         */
+        data class ConversationSummary(
+            val messages: List<ChatMessage> = emptyList(),
+            val totalTokens: Int = 0,
+            val lastTopic: String = ""
+        )
+    }
+
+    /**
+     * 优化后的提示词（文档规定的数据类）
+     */
+    data class OptimizedPrompt(
+        /** 优化后的提示词内容 */
+        val content: String,
+        /** 使用的模板（如果有） */
+        val matchedTemplate: PromptTemplate? = null,
+        /** 检测到的代码语言 */
+        val detectedLanguage: CodeLanguageDetection? = null,
+        /** 添加的上下文信息 */
+        val addedContext: List<ContextInfo> = emptyList(),
+        /** 截断信息 */
+        val truncatedInfo: List<String> = emptyList(),
+        /** 改进点列表 */
+        val improvements: List<String> = emptyList(),
+        /** 优化置信度 0.0-1.0 */
+        val confidence: Double = 0.0
+    )
 
     /**
      * 优化配置
@@ -83,13 +319,58 @@ class PromptOptimizer(private val project: Project) {
         PROJECT_STRUCTURE,
         RECENT_FILES,
         SESSION_HISTORY,
-        USER_CONTEXT
+        USER_CONTEXT,
+        TEMPLATE_ENHANCED,
+        LANGUAGE_DETECTED
     }
 
     // ==================== 核心API ====================
 
     /**
-     * 优化提示词
+     * 优化提示词（文档规定的主要接口）
+     *
+     * @param input 原始输入
+     * @param context 提示词上下文
+     * @return 优化后的提示词
+     */
+    fun optimize(input: String, context: PromptContext): OptimizedPrompt {
+        val addedContext = mutableListOf<ContextInfo>()
+        val truncatedInfo = mutableListOf<String>()
+
+        var processedInput = input
+
+        // 1. 模板匹配
+        val matchedTemplate = PromptTemplate.matchTemplate(input)
+
+        // 2. 代码检测与格式化
+        val codeDetection = detectAndFormatCode(processedInput, addedContext)
+        processedInput = codeDetection.first
+        val detectedLanguage = codeDetection.second
+
+        // 3. 上下文注入
+        processedInput = injectContext(processedInput, context, addedContext)
+
+        // 4. 如果匹配到模板，应用模板
+        if (matchedTemplate != null) {
+            processedInput = applyTemplate(processedInput, matchedTemplate, context, addedContext)
+        }
+
+        // 5. 格式规范化
+        processedInput = normalizePrompt(processedInput)
+
+        return OptimizedPrompt(
+            content = processedInput,
+            matchedTemplate = matchedTemplate,
+            detectedLanguage = detectedLanguage,
+            addedContext = addedContext,
+            truncatedInfo = truncatedInfo,
+            improvements = emptyList(),  // 同步模式不支持AI优化
+            confidence = if (matchedTemplate != null) 0.9 else 0.7
+        )
+    }
+
+    /**
+     * 优化提示词（异步版本，支持AI增强）
      *
      * @param prompt 原始提示词
      * @param session 当前会话（可选）
@@ -126,7 +407,7 @@ class PromptOptimizer(private val project: Project) {
         // 4. 格式规范化
         val finalPrompt = normalizePrompt(withProjectInfo)
 
-        // 5. AI 驱动的优化（新增 Step 2）
+        // 5. AI 驱动的优化
         val aiOptimizationResult = performAiOptimization(finalPrompt, addedContext)
 
         OptimizationResult(
@@ -136,6 +417,358 @@ class PromptOptimizer(private val project: Project) {
             improvements = aiOptimizationResult.second,
             confidence = aiOptimizationResult.third
         )
+    }
+
+    /**
+     * 使用 PromptContext 异步优化
+     */
+    suspend fun optimizeAsync(
+        input: String,
+        context: PromptContext
+    ): OptimizedPrompt = withContext(Dispatchers.Default) {
+        val addedContext = mutableListOf<ContextInfo>()
+        val truncatedInfo = mutableListOf<String>()
+
+        var processedInput = input
+
+        // 1. 模板匹配
+        val matchedTemplate = PromptTemplate.matchTemplate(input)
+
+        // 2. 代码检测与格式化
+        val codeDetection = detectAndFormatCode(processedInput, addedContext)
+        processedInput = codeDetection.first
+        val detectedLanguage = codeDetection.second
+
+        // 3. 上下文注入
+        processedInput = injectContext(processedInput, context, addedContext)
+
+        // 4. 如果匹配到模板，应用模板
+        if (matchedTemplate != null) {
+            processedInput = applyTemplate(processedInput, matchedTemplate, context, addedContext)
+        }
+
+        // 5. 格式规范化
+        processedInput = normalizePrompt(processedInput)
+
+        // 6. AI 驱动的优化
+        val aiResult = performAiOptimization(processedInput, addedContext)
+
+        OptimizedPrompt(
+            content = aiResult.first,
+            matchedTemplate = matchedTemplate,
+            detectedLanguage = detectedLanguage,
+            addedContext = addedContext,
+            truncatedInfo = truncatedInfo,
+            improvements = aiResult.second,
+            confidence = aiResult.third
+        )
+    }
+
+    // ==================== 模板应用 ====================
+
+    /**
+     * 应用模板到输入
+     */
+    private fun applyTemplate(
+        input: String,
+        template: PromptTemplate,
+        context: PromptContext,
+        addedContext: MutableList<ContextInfo>
+    ): String {
+        // 提取模板关键词后的内容
+        var content = input.substringAfter(template.keyword).trim()
+
+        // 检测代码语言
+        val language = context.selectedCode?.language
+            ?: detectLanguage(content)
+            ?: "plaintext"
+
+        // 根据模板类型构建提示词
+        val enhancedContent = when (template) {
+            PromptTemplate.EXPLAIN,
+            PromptTemplate.REVIEW,
+            PromptTemplate.TEST,
+            PromptTemplate.OPTIMIZE,
+            PromptTemplate.DEBUG,
+            PromptTemplate.POLISH,
+            PromptTemplate.REFACTOR -> {
+                // 如果没有代码块包装，则添加
+                if (!content.contains("```")) {
+                    "```$language\n$content\n```"
+                } else {
+                    content
+                }
+            }
+            PromptTemplate.TRANSLATE -> content
+        }
+
+        // 记录模板使用
+        addedContext.add(ContextInfo(
+            type = ContextType.TEMPLATE_ENHANCED,
+            content = "Used template: ${template.keyword} - ${template.description}",
+            metadata = mapOf("template" to template.name)
+        ))
+
+        // 构建带模板的完整提示词
+        val templated = template.template
+            .replace("{language}", language)
+            .replace("{code}", extractCodeWithoutWrapper(content, language))
+            .replace("{content}", content)
+            .replace("{testFramework}", getTestFramework(language))
+
+        return buildString {
+            append(templated)
+            if (context.selectedCode?.filePath?.isNotEmpty() == true) {
+                append("\n\n文件路径: ${context.selectedCode.filePath}")
+            }
+        }
+    }
+
+    /**
+     * 提取代码内容（去掉代码块包装）
+     */
+    private fun extractCodeWithoutWrapper(content: String, language: String): String {
+        val codeBlockRegex = """```$language\n([\s\S]*?)```""".toRegex()
+        val match = codeBlockRegex.find(content)
+        return if (match != null) {
+            match.groupValues[1]
+        } else {
+            // 尝试不带语言标识
+            val plainCodeRegex = """```\n([\s\S]*?)```""".toRegex()
+            val plainMatch = plainCodeRegex.find(content)
+            plainMatch?.groupValues?.get(1) ?: content
+        }
+    }
+
+    /**
+     * 获取测试框架
+     */
+    private fun getTestFramework(language: String): String {
+        return when (language.lowercase()) {
+            "kotlin", "kt" -> "Kotlin Test / JUnit"
+            "java" -> "JUnit"
+            "javascript", "js" -> "Jest / Mocha"
+            "typescript", "ts" -> "Jest"
+            "python", "py" -> "pytest / unittest"
+            "go" -> "testing"
+            else -> "JUnit / standard testing library"
+        }
+    }
+
+    // ==================== 代码检测与格式化 ====================
+
+    /**
+     * 检测代码语言并格式化
+     *
+     * @return Pair(处理后的输入, 检测结果)
+     */
+    private fun detectAndFormatCode(
+        input: String,
+        addedContext: MutableList<ContextInfo>
+    ): Pair<String, CodeLanguageDetection?> {
+        var processed = input
+        var detection: CodeLanguageDetection? = null
+
+        // 检测是否有未包装的代码
+        val codePatterns = listOf(
+            // 函数定义
+            Regex("""(fun |def |function |func |class |interface |struct )\w*\s*\("""),
+            // 常见语法结构
+            Regex("""(val |var |let |const |int |String |bool |if |for |while )\w*"""),
+            // 常见关键字
+            Regex("""(import |package |using |require |include )"""),
+            // 括号和分号组合
+            Regex("""\{[\s\S]*;\s*\}""")
+        )
+
+        // 检查是否需要添加代码块
+        val isLikelyCode = codePatterns.any { it.containsMatchIn(input) }
+        val hasCodeBlock = input.contains("```")
+
+        if (isLikelyCode && !hasCodeBlock) {
+            // 检测语言
+            val lang = detectLanguage(input)
+            if (lang != null) {
+                processed = "```$lang\n$input\n```"
+                detection = CodeLanguageDetection(
+                    language = lang,
+                    confidence = 0.85,
+                    isDetected = true
+                )
+                addedContext.add(ContextInfo(
+                    type = ContextType.LANGUAGE_DETECTED,
+                    content = "Detected language: $lang",
+                    metadata = mapOf("language" to lang, "confidence" to 0.85)
+                ))
+            }
+        }
+
+        // 规范化已有的代码块
+        if (hasCodeBlock) {
+            processed = normalizeCodeBlocks(processed)
+            // 尝试检测代码块语言
+            val langInBlock = Regex("""```(\w*)\n""").find(processed)?.groupValues?.get(1)
+            if (!langInBlock.isNullOrEmpty()) {
+                detection = CodeLanguageDetection(
+                    language = langInBlock,
+                    confidence = 1.0,
+                    isDetected = true
+                )
+            }
+        }
+
+        return Pair(processed, detection)
+    }
+
+    /**
+     * 检测代码语言
+     */
+    fun detectLanguage(code: String): String? {
+        if (code.isBlank()) return null
+
+        val trimmed = code.trim()
+
+        // Kotlin 检测
+        if (trimmed.contains("fun ") && (trimmed.contains("val ") || trimmed.contains("var "))) {
+            return "kotlin"
+        }
+
+        // Java 检测
+        if (trimmed.contains("public class ") || trimmed.contains("public interface ")) {
+            return "java"
+        }
+
+        // JavaScript/TypeScript 检测
+        if (trimmed.contains("function ") || trimmed.contains("const ") || trimmed.contains("let ")) {
+            if (trimmed.contains(": ") && (trimmed.contains("string") || trimmed.contains("number") || trimmed.contains("boolean"))) {
+                return "typescript"
+            }
+            return "javascript"
+        }
+
+        // Python 检测
+        if (trimmed.contains("def ") && trimmed.contains(":") && !trimmed.contains("{")) {
+            return "python"
+        }
+
+        // Go 检测
+        if (trimmed.contains("func ") && trimmed.contains("package ")) {
+            return "go"
+        }
+
+        // JSON 检测
+        if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+            try {
+                // 简单验证是否为有效JSON
+                if (trimmed.contains("\"") && trimmed.contains(":")) {
+                    return "json"
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
+        // XML 检测
+        if (trimmed.startsWith("<?xml") || trimmed.startsWith("<") && trimmed.endsWith(">")) {
+            return "xml"
+        }
+
+        // SQL 检测
+        if (trimmed.contains("SELECT ", ignoreCase = true) &&
+            trimmed.contains("FROM ", ignoreCase = true)) {
+            return "sql"
+        }
+
+        // HTML 检测
+        if (trimmed.contains("<html", ignoreCase = true) ||
+            trimmed.contains("<div", ignoreCase = true) ||
+            trimmed.contains("<!DOCTYPE", ignoreCase = true)) {
+            return "html"
+        }
+
+        // CSS 检测
+        if (trimmed.contains("{") && trimmed.contains(":") &&
+            (trimmed.contains("color") || trimmed.contains("margin") || trimmed.contains("padding"))) {
+            return "css"
+        }
+
+        // Shell/Bash 检测
+        if (trimmed.contains("#!/bin/bash") || trimmed.contains("echo ") ||
+            (trimmed.contains("$") && trimmed.contains("="))) {
+            return "bash"
+        }
+
+        return null
+    }
+
+    // ==================== 上下文注入 ====================
+
+    /**
+     * 注入上下文信息
+     */
+    private fun injectContext(
+        input: String,
+        context: PromptContext,
+        addedContext: MutableList<ContextInfo>
+    ): String {
+        val builder = StringBuilder()
+
+        // 1. 添加项目信息
+        if (context.projectInfo.name.isNotEmpty()) {
+            builder.append("<project>\n")
+            builder.append("名称: ${context.projectInfo.name}\n")
+            if (context.projectInfo.path.isNotEmpty()) {
+                builder.append("路径: ${context.projectInfo.path}\n")
+            }
+            if (context.projectInfo.language.isNotEmpty()) {
+                builder.append("语言: ${context.projectInfo.language}\n")
+            }
+            if (context.projectInfo.framework.isNotEmpty()) {
+                builder.append("框架: ${context.projectInfo.framework}\n")
+            }
+            builder.append("</project>\n\n")
+        }
+
+        // 2. 添加选中代码信息
+        context.selectedCode?.let { selected ->
+            if (selected.code.isNotEmpty()) {
+                builder.append("<selected_code>\n")
+                if (selected.filePath.isNotEmpty()) {
+                    builder.append("文件: ${selected.filePath}\n")
+                }
+                if (selected.language.isNotEmpty()) {
+                    builder.append("语言: ${selected.language}\n")
+                }
+                builder.append("代码:\n```${selected.language.ifEmpty { "plaintext" }}\n${selected.code}\n```\n")
+                builder.append("</selected_code>\n\n")
+            }
+        }
+
+        // 3. 添加相关文件
+        if (context.relatedFiles.isNotEmpty()) {
+            builder.append("<related_files>\n")
+            context.relatedFiles.take(5).forEach { file ->
+                builder.append("文件: ${file.path}\n")
+                builder.append("内容:\n```\n${file.content.take(2000)}\n```\n\n")
+            }
+            builder.append("</related_files>\n\n")
+        }
+
+        // 4. 添加对话历史摘要
+        if (context.conversationHistory.messages.isNotEmpty()) {
+            builder.append("<conversation_history>\n")
+            val recentMessages = context.conversationHistory.messages.takeLast(5)
+            recentMessages.forEach { msg ->
+                val role = msg.role.name.lowercase()
+                val content = msg.content.take(300)
+                builder.append("$role: $content\n")
+            }
+            builder.append("</conversation_history>\n\n")
+        }
+
+        builder.append(input)
+        return builder.toString()
     }
 
     /**

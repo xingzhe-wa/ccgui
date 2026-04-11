@@ -2,16 +2,18 @@
  * SlashCommandPalette - 斜杠命令面板
  *
  * 触发条件：ChatInput 输入 '/' 时显示浮动面板
- * 支持 6 个命令：/compact, /clear, /model, /mode, /retry, /export
+ * 支持命令：/compact, /clear, /model, /mode, /session, /retry, /export
  */
 
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import { javaBridge } from '@/lib/java-bridge';
+import { useChatConfigStore } from '@/shared/stores/chatConfigStore';
 import { cn } from '@/shared/utils/cn';
 
 export interface SlashCommand {
   command: string;
   description: string;
+  icon?: string;
   action: () => void | Promise<void>;
 }
 
@@ -19,6 +21,7 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     command: '/compact',
     description: '压缩上下文，减少 token 消耗',
+    icon: '🗜️',
     action: async () => {
       await javaBridge.executeSlashCommand('/compact');
     }
@@ -26,6 +29,7 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     command: '/clear',
     description: '清空当前会话的所有消息',
+    icon: '🗑️',
     action: async () => {
       await javaBridge.executeSlashCommand('/clear');
       // 清空前端消息列表
@@ -35,6 +39,7 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     command: '/retry',
     description: '重试上一条 AI 回复',
+    icon: '🔄',
     action: async () => {
       await javaBridge.executeSlashCommand('/retry');
     }
@@ -42,11 +47,42 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     command: '/export',
     description: '导出会话内容',
+    icon: '📤',
     action: async () => {
       const result = await javaBridge.executeSlashCommand('/export');
       if (result.success) {
         console.log('[SlashCommandPalette] Export result:', result);
       }
+    }
+  },
+  {
+    command: '/model',
+    description: '切换 AI 模型',
+    icon: '🤖',
+    action: () => {
+      // 切换到模型选择页面
+      window.location.hash = '/settings?tab=model';
+    }
+  },
+  {
+    command: '/mode',
+    description: '切换对话模式 (thinking/plan/auto)',
+    icon: '🧠',
+    action: () => {
+      const modeStore = useChatConfigStore.getState();
+      const currentMode = modeStore.conversationMode as string || 'AUTO';
+      const modeOrder = ['AUTO', 'THINKING', 'PLANNING'];
+      const idx = modeOrder.indexOf(currentMode);
+      const next = modeOrder[(idx + 1) % 3] as 'AUTO' | 'THINKING' | 'PLANNING';
+      modeStore.setConversationMode(next);
+    }
+  },
+  {
+    command: '/session',
+    description: '查看会话历史',
+    icon: '💬',
+    action: () => {
+      window.location.hash = '/history';
     }
   }
 ];

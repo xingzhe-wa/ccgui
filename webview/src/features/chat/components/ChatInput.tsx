@@ -12,6 +12,7 @@ import { InputToolbar } from './InputToolbar';
 import { SlashCommandPalette } from '@/main/components/SlashCommandPalette';
 import { ConfigSelect } from '@/main/components/ConfigSelect';
 import { useSessionStore } from '@/shared/stores/sessionStore';
+import { useImageCompression } from '@/shared/hooks/useImageCompression';
 import { javaBridge } from '@/lib/java-bridge';
 import type { ContentPart, MessageReference } from '@/shared/types';
 
@@ -65,6 +66,25 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
 
+  // 图片压缩 Hook
+  const {
+    progressMap,
+    isCompressing,
+    compress
+  } = useImageCompression({
+    maxSize: 500 * 1024, // 500KB 压缩阈值
+    outputFormat: 'image/jpeg',
+    quality: 0.8
+  });
+
+  // 计算总压缩进度
+  const compressionProgress = Object.values(progressMap).length > 0
+    ? Math.round(
+        Object.values(progressMap).reduce((sum, p) => sum + p.progress, 0) /
+        Object.values(progressMap).length
+      )
+    : 0;
+
   // 自动聚焦到输入框：会话切换后（会话有效时）
   useEffect(() => {
     if (currentSessionId && !disabled) {
@@ -75,11 +95,24 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   const handleSend = useCallback(async () => {
     setShowSlashPalette(false);
     if (!text.trim() && attachments.length === 0) return;
+    if (isCompressing) return; // 压缩中禁止发送
+
+    // 先压缩所有图片附件
+    let processedAttachments = attachments;
+    if (attachments.some((f) => f.type.startsWith('image/'))) {
+      try {
+        const compressedFiles = await compress(attachments);
+        processedAttachments = compressedFiles.map((cf) => cf.file);
+      } catch (error) {
+        console.error('Failed to compress attachments:', error);
+        // 压缩失败时使用原始文件
+      }
+    }
 
     const contentParts: ContentPart[] = [];
 
     // Read all files and convert to base64
-    for (const file of attachments) {
+    for (const file of processedAttachments) {
       if (file.type.startsWith('image/')) {
         const base64 = await readFileAsBase64(file);
         contentParts.push({
@@ -103,10 +136,10 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
     setText('');
     setAttachments([]);
     setOptimizationResult(null);
-  }, [text, attachments, references, onSend]);
+  }, [text, attachments, references, onSend, isCompressing, compress]);
 
   const handleFilesSelected = useCallback((files: File[]) => {
-    setAttachments((prev) => [...prev, ...files].slice(0, 5));
+    setAttachments((prev) => [...prev, ...files].slice(0, 10));
     setShowAttachMenu(false);
   }, []);
 
@@ -154,16 +187,37 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       )}
       onKeyDown={handleKeyDown}
     >
+      {/* Compression progress bar */}
+      {isCompressing && (
+        <div className="px-4 pt-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-muted-foreground">正在压缩图片...</span>
+            <span className="text-xs text-muted-foreground">{compressionProgress}%</span>
+          </div>
+          <div className="h-1 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${compressionProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Attachments preview */}
       {attachments.length > 0 && (
         <div className="flex items-center gap-2 px-4 pt-3 overflow-x-auto">
-          {attachments.map((file, index) => (
-            <ImagePreview
-              key={`${file.name}-${index}`}
-              file={file}
-              onRemove={() => handleRemoveAttachment(index)}
-            />
-          ))}
+          {attachments.map((file, index) => {
+            const fileProgress = progressMap[`${file.name}-${file.size}-${index}`];
+            return (
+              <ImagePreview
+                key={`${file.name}-${index}`}
+                file={file}
+                onRemove={() => handleRemoveAttachment(index)}
+                progress={fileProgress?.progress}
+                isCompressing={fileProgress?.status === 'compressing'}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -174,7 +228,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
           onOptimize={handleOptimize}
           isStreaming={isStreaming}
           isOptimizing={isOptimizing}
-          disabled={disabled}
+          disabled={disabled || isCompressing}
         />
       </div>
 
@@ -281,7 +335,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
             }}
             onSubmit={handleSend}
             placeholder={placeholder}
-            disabled={disabled}
+            disabled={disabled || isCompressing}
             maxRows={8}
           />
           {/* Slash Command Palette */}
@@ -302,7 +356,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
 
         <SendButton
           onClick={handleSend}
-          disabled={disabled || (!text.trim() && attachments.length === 0)}
+          disabled={disabled || isCompressing || (!text.trim() && attachments.length === 0)}
           loading={isStreaming}
         />
       </div>

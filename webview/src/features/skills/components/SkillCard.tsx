@@ -5,7 +5,7 @@
  */
 
 import { memo, useCallback } from 'react';
-import { Edit2, Trash2, Play, Copy } from 'lucide-react';
+import { Edit2, Trash2, Play, Copy, Download } from 'lucide-react';
 import type { Skill } from '@/shared/types';
 import { cn } from '@/shared/utils/cn';
 import { Button } from '@/shared/components/ui/button/Button';
@@ -25,6 +25,8 @@ export interface SkillCardProps {
   onExecute?: () => void;
   /** 复制回调 */
   onDuplicate?: () => void;
+  /** 导出回调 */
+  onExport?: () => void;
   className?: string;
 }
 
@@ -49,6 +51,7 @@ export const SkillCard = memo<SkillCardProps>(function SkillCard({
   onDelete,
   onExecute,
   onDuplicate,
+  onExport,
   className
 }: SkillCardProps) {
   const handleEdit = useCallback(
@@ -81,6 +84,14 @@ export const SkillCard = memo<SkillCardProps>(function SkillCard({
       onDuplicate?.();
     },
     [onDuplicate]
+  );
+
+  const handleExport = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onExport?.();
+    },
+    [onExport]
   );
 
   return (
@@ -128,6 +139,11 @@ export const SkillCard = memo<SkillCardProps>(function SkillCard({
         {onDuplicate && (
           <Button variant="ghost" size="icon" onClick={handleDuplicate} title="复制">
             <Copy className="h-4 w-4" />
+          </Button>
+        )}
+        {onExport && (
+          <Button variant="ghost" size="icon" onClick={handleExport} title="导出">
+            <Download className="h-4 w-4" />
           </Button>
         )}
         {onEdit && (

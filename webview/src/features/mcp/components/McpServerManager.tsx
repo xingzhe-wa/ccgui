@@ -7,12 +7,13 @@
 import { memo, useCallback, useState, useEffect } from 'react';
 import { Plus, Search, RefreshCw } from 'lucide-react';
 import type { McpServer } from '@/shared/types';
-import { McpServerStatus } from '@/shared/types';
+import { McpServerStatus } from '@/shared/types/ecosystem';
 import { useMcpStore } from '@/shared/stores/mcpStore';
 import { McpServerList } from './McpServerList';
 import { McpServerConfig } from './McpServerConfig';
 import { cn } from '@/shared/utils/cn';
 import { Button } from '@/shared/components/ui/button/Button';
+import { javaBridge } from '@/lib/java-bridge';
 
 export interface McpServerManagerProps {
   className?: string;
@@ -100,16 +101,27 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
 
   // 启动
   const handleStart = useCallback(
-    (server: McpServer) => {
-      startServer(server.id);
+    async (server: McpServer) => {
+      try {
+        startServer(server.id); // 先更新本地状态为CONNECTED
+        await javaBridge.startMcpServer(server.id);
+        // 成功后保持CONNECTED状态（由javaBridge调用结果决定）
+      } catch {
+        testConnection(server.id, false); // 失败时更新为ERROR
+      }
     },
-    [startServer]
+    [startServer, testConnection]
   );
 
   // 停止
   const handleStop = useCallback(
-    (server: McpServer) => {
-      stopServer(server.id);
+    async (server: McpServer) => {
+      try {
+        await javaBridge.stopMcpServer(server.id);
+        stopServer(server.id); // 成功后更新为DISCONNECTED
+      } catch {
+        stopServer(server.id); // 失败也停止
+      }
     },
     [stopServer]
   );
@@ -118,9 +130,9 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
   const handleTest = useCallback(
     async (server: McpServer) => {
       try {
-        // 模拟测试连接
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        testConnection(server.id, true);
+        testConnection(server.id, true); // 先设置为连接中
+        const result = await javaBridge.testMcpServer(server.id);
+        testConnection(server.id, result.success === true);
       } catch {
         testConnection(server.id, false);
       }

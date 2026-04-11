@@ -119,3 +119,14 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     });
   }
 }));
+
+/**
+ * 优化的流式状态选择器
+ * 只选择需要的字段，避免不必要的后续渲染
+ */
+export const useStreamingState = () =>
+  useStreamingStore((s) => ({
+    streamingMessageId: s.streamingMessageId,
+    isStreaming: s.isStreaming,
+    streamingBuffer: s.streamingBuffer
+  }));

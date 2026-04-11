@@ -19,7 +19,11 @@ data class AppConfig(
     /** 多供应商配置 Profile 列表 */
     val providerProfiles: List<ProviderProfile> = emptyList(),
     /** 当前激活的 Profile ID */
-    val activeProfileId: String? = null
+    val activeProfileId: String? = null,
+    /** 每日预算上限 (美元) */
+    val dailyBudget: Double = 10.0,
+    /** 每月预算上限 (美元) */
+    val monthlyBudget: Double = 200.0
 ) {
 
     companion object {
@@ -45,7 +49,9 @@ data class AppConfig(
                 autoSaveInterval = json.get("autoSaveInterval")?.asLong ?: 30000L,
                 toolWindowAnchor = json.get("toolWindowAnchor")?.asString ?: "right",
                 providerProfiles = profiles,
-                activeProfileId = json.get("activeProfileId")?.asString
+                activeProfileId = json.get("activeProfileId")?.asString,
+                dailyBudget = json.get("dailyBudget")?.asDouble ?: 10.0,
+                monthlyBudget = json.get("monthlyBudget")?.asDouble ?: 200.0
             )
         }
     }
@@ -69,6 +75,8 @@ data class AppConfig(
                 providerProfiles.forEach { add(it.toJson()) }
             })
             activeProfileId?.let { addProperty("activeProfileId", it) }
+            addProperty("dailyBudget", dailyBudget)
+            addProperty("monthlyBudget", monthlyBudget)
         }
     }
 }

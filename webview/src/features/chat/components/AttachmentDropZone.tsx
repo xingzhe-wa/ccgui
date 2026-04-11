@@ -18,7 +18,7 @@ export const AttachmentDropZone = memo<AttachmentDropZoneProps>(function Attachm
   onFilesSelected,
   accept = ['image/*', 'application/pdf', 'text/*'],
   maxSize = 10 * 1024 * 1024, // 10MB
-  maxFiles = 5,
+  maxFiles = 10,
   disabled = false,
   className
 }) {

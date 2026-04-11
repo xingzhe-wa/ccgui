@@ -36,8 +36,8 @@ interface McpStoreState {
   /** 删除服务器 */
   deleteServer: (serverId: string) => void;
 
-  /** 启动服务器（更新状态为 connected） */
-  startServer: (serverId: string) => void;
+  /** 启动服务器（更新状态为 connected，可选指定状态） */
+  startServer: (serverId: string, status?: McpServerStatus) => void;
 
   /** 停止服务器（更新状态为 disconnected） */
   stopServer: (serverId: string) => void;

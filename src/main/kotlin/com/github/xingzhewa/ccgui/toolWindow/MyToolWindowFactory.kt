@@ -12,6 +12,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowAnchor
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
+import kotlinx.coroutines.*
 import java.awt.BorderLayout
 import java.io.File
 import java.net.URLDecoder
@@ -26,6 +27,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
 
     private val log = logger<MyToolWindowFactory>()
     private var cefPanel: CefBrowserPanel? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         log.info("Creating CC Assistant tool window for project: ${project.name}")
@@ -60,8 +62,10 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val content = ContentFactory.getInstance().createContent(panel, "", false)
             toolWindow.contentManager.addContent(content)
 
-            // 加载前端页面
-            loadFrontendPage(project, toolWindow)
+            // 加载前端页面（后台执行，避免阻塞 EDT）
+            scope.launch(Dispatchers.IO) {
+                loadFrontendPage(project, toolWindow)
+            }
 
             log.info("CC Assistant tool window created successfully with anchor: ${config.toolWindowAnchor}")
         } catch (e: Exception) {
@@ -87,33 +91,57 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
     }
 
     /**
-     * 加载前端页面
+     * 加载前端页面（后台执行）
      */
-    private fun loadFrontendPage(project: Project, toolWindow: ToolWindow) {
-        try {
-            // 优先加载本地开发服务器
-            val devServerUrl = "http://localhost:3000"
-            val useDevServer = isDevServerAvailable(devServerUrl)
+    private suspend fun loadFrontendPage(project: Project, toolWindow: ToolWindow) {
+        withContext(Dispatchers.IO) {
+            try {
+                // 优先加载本地开发服务器
+                val devServerUrl = "http://localhost:3000"
+                val useDevServer = isDevServerAvailable(devServerUrl)
 
-            if (useDevServer) {
-                log.info("Using development server: $devServerUrl")
-                cefPanel?.loadHtmlPage(devServerUrl)
-            } else {
-                // 加载打包的前端资源
-                loadProductionFrontend()
+                // 切换到主线程执行 UI 操作
+                withContext(Dispatchers.Main) {
+                    if (useDevServer) {
+                        log.info("Using development server: $devServerUrl")
+                        cefPanel?.loadHtmlPage(devServerUrl)
+                    } else {
+                        // 加载打包的前端资源
+                        loadProductionFrontend()
+                    }
+                }
+            } catch (e: Exception) {
+                log.error("Failed to load frontend", e)
             }
-        } catch (e: Exception) {
-            log.error("Failed to load frontend", e)
         }
     }
 
     /**
-     * 加载生产环境前端
+     * 加载生产环境前端（后台执行）
      *
      * 策略：从插件 JAR 中提取整个 webview 目录到临时目录，
      * 使用 file:// URL 加载，让相对路径的 /assets/... 正确解析
      */
-    private fun loadProductionFrontend() {
+    private suspend fun loadProductionFrontend() {
+        // JAR 提取在 IO 线程执行
+        val fileUrl = withContext(Dispatchers.IO) {
+            extractFrontendToTemp()
+        }
+
+        // 切换到主线程执行 UI 操作
+        if (fileUrl != null) {
+            withContext(Dispatchers.Main) {
+                log.info("${MyBundle.message("frontend.loading.from.file")}: $fileUrl")
+                cefPanel?.loadHtmlPage(fileUrl)
+            }
+        }
+    }
+
+    /**
+     * 从 JAR 提取前端资源到临时目录
+     * @return 提取的 index.html 的 file URL，或 null 如果失败
+     */
+    private fun extractFrontendToTemp(): String? {
         try {
             // 1. 使用插件类加载器获取资源（不是系统类加载器）
             // IDEA 插件运行在沙盒中，资源在 PluginClassLoader 中，不在 SystemClassLoader 中
@@ -121,7 +149,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val distUrl = classLoader.getResource("webview/dist/index.html")
             if (distUrl == null) {
                 log.error(MyBundle.message("frontend.resource.not.found"))
-                return
+                return null
             }
             log.info("Found frontend resource at: $distUrl")
 
@@ -130,13 +158,13 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
             val jarUrlStr = distUrl.toString()
             if (!jarUrlStr.startsWith("jar:file:")) {
                 log.error("${MyBundle.message("frontend.url.scheme.unexpected")}: $jarUrlStr")
-                return
+                return null
             }
 
             val bangIndex = jarUrlStr.indexOf("!/")
             if (bangIndex == -1) {
                 log.error("${MyBundle.message("frontend.url.parse.failed")}: $jarUrlStr")
-                return
+                return null
             }
 
             // 提取并解码 JAR 文件路径（处理 URL 编码的空格等）
@@ -173,25 +201,25 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
                 jarFile.close()
             }
 
-            // 5. 使用 file:// URL 加载 HTML
+            // 5. 返回 file URL
             val indexFile = File(tempDir, "index.html")
-            if (indexFile.exists()) {
-                val fileUrl = indexFile.toURI().toURL().toString()
-                log.info("${MyBundle.message("frontend.loading.from.file")}: $fileUrl")
-                cefPanel?.loadHtmlPage(fileUrl)
+            return if (indexFile.exists()) {
+                indexFile.toURI().toURL().toString()
             } else {
                 log.error("index.html not found after extraction: ${indexFile.absolutePath}")
+                null
             }
         } catch (e: Exception) {
             log.error(MyBundle.message("frontend.load.failed"), e)
+            return null
         }
     }
 
     /**
-     * 检查开发服务器是否可用
+     * 检查开发服务器是否可用（后台执行）
      */
-    private fun isDevServerAvailable(url: String): Boolean {
-        return try {
+    private suspend fun isDevServerAvailable(url: String): Boolean = withContext(Dispatchers.IO) {
+        try {
             val connection = java.net.URL(url).openConnection()
             connection.connectTimeout = 1000
             connection.readTimeout = 1000
@@ -205,6 +233,7 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
     override fun shouldBeAvailable(project: Project) = true
 
     override fun dispose() {
+        scope.cancel()
         cefPanel?.dispose()
         cefPanel = null
     }

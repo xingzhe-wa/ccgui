@@ -6,6 +6,7 @@
  */
 
 import { lazy, Suspense, useState, useEffect, memo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ModelConfigPanel } from '@/features/model/components';
 import { ThemeSwitcher } from '@/features/theme/components/ThemeSwitcher';
 import { LoadingFallback } from '@/shared/components/ui/LoadingFallback';
@@ -105,7 +106,12 @@ const navItemClass = cn(
 );
 
 export const ToolsView = memo(function ToolsView(): JSX.Element {
-  const [activeSection, setActiveSection] = useState('skills');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const validTabs = ['skills', 'agents', 'mcp', 'provider', 'theme', 'about'];
+  const initialSection = tabParam && validTabs.includes(tabParam) ? tabParam : 'skills';
+
+  const [activeSection, setActiveSection] = useState(initialSection);
 
   return (
     <div className="flex h-full">

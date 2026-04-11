@@ -4,8 +4,8 @@
 
 import { memo, useState, useCallback, useMemo } from 'react';
 import { cn } from '@/shared/utils/cn';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import type { ChatMessage } from '@/shared/types';
+import { ContentBlockRenderer } from './ContentBlockRenderer';
+import type { ChatMessage, ContentPart, ClaudeRawContent } from '@/shared/types';
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -32,6 +32,7 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+  const isStreaming = message.isStreaming === true;
 
   const handleReply = useCallback(() => {
     onReply?.(message.id);
@@ -54,70 +55,73 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
     onQuote?.(message.id, excerpt);
   }, [message.id, message.content, onQuote]);
 
+  /**
+   * 解析 ClaudeRawContent 为 ContentPart
+   */
+  const parseRawContent = useCallback((raw: ClaudeRawContent[]): ContentPart[] => {
+    return raw.map((block): ContentPart => {
+      switch (block.type) {
+        case 'text':
+          return { type: 'text', text: block.text || '' };
+        case 'thinking':
+          return { type: 'thinking', thinking: block.thinking || '', text: block.text };
+        case 'tool_use':
+          return { type: 'tool_use', id: block.id, name: block.name || '', input: block.input };
+        case 'tool_result': {
+          const resultBlock: ContentPart = { type: 'tool_result', tool_use_id: block.tool_use_id, is_error: block.is_error };
+          if (typeof block.content === 'string') {
+            (resultBlock as any).content = block.content;
+          } else if (Array.isArray(block.content)) {
+            // 递归解析嵌套内容
+            (resultBlock as any).content = parseRawContent(block.content);
+          }
+          return resultBlock;
+        }
+        case 'image':
+          if (block.source) {
+            return { type: 'image', mimeType: block.source.media_type || 'image/png', data: block.source.data };
+          }
+          return { type: 'text', text: '[Image]' };
+        default:
+          return { type: 'text', text: `[Unsupported block type: ${(block as any).type}]` };
+      }
+    });
+  }, []);
+
+  /**
+   * 获取消息内容块
+   * 支持从 raw 字段解析复杂内容
+   */
+  const contentBlocks = useMemo((): ContentPart[] => {
+    // 如果有 raw 字段，解析为内容块
+    if (message.raw && typeof message.raw !== 'string') {
+      const raw = message.raw as { content?: ClaudeRawContent[] };
+      if (raw.content && Array.isArray(raw.content)) {
+        return parseRawContent(raw.content);
+      }
+    }
+    // 如果有 attachments，直接使用
+    if (message.attachments && message.attachments.length > 0) {
+      return message.attachments;
+    }
+    // 否则作为文本处理
+    return [{ type: 'text', text: message.content }];
+  }, [message.raw, message.attachments, message.content, parseRawContent]);
+
   const renderedContent = useMemo(() => {
-    // Render text content
-    const contentElement = (
-      <MarkdownRenderer
-        content={message.content}
-        className="text-sm leading-relaxed"
+    // 使用 ContentBlockRenderer 渲染内容块
+    return contentBlocks.map((block, index) => (
+      <ContentBlockRenderer
+        key={`${message.id}-block-${index}`}
+        block={block}
+        messageIndex={0}
+        messageType={message.role}
+        isStreaming={isStreaming && index === contentBlocks.length - 1}
+        isLastMessage={true}
+        isLastBlock={index === contentBlocks.length - 1}
       />
-    );
-
-    // Render attachments if any
-    const attachmentsElement = message.attachments && message.attachments.length > 0 && (
-      <div className="flex flex-wrap gap-2 mt-2">
-        {message.attachments.map((attachment, index) => {
-          if (attachment.type === 'image') {
-            return (
-              <img
-                key={index}
-                src={`data:${attachment.mimeType};base64,${attachment.data}`}
-                alt={attachment.mimeType}
-                className="max-w-[300px] rounded-lg"
-                loading="lazy"
-              />
-            );
-          }
-          if (attachment.type === 'file') {
-            return (
-              <div
-                key={index}
-                className="flex items-center gap-2 p-2 rounded-md bg-background-secondary"
-              >
-                <svg
-                  className="w-4 h-4 text-foreground-muted"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                <span className="text-sm text-foreground truncate flex-1">{attachment.name}</span>
-                {attachment.size && (
-                  <span className="text-xs text-foreground-muted">
-                    {(attachment.size / 1024).toFixed(1)} KB
-                  </span>
-                )}
-              </div>
-            );
-          }
-          return null;
-        })}
-      </div>
-    );
-
-    return (
-      <>
-        {contentElement}
-        {attachmentsElement}
-      </>
-    );
-  }, [message.content, message.attachments]);
+    ));
+  }, [contentBlocks, message.id, message.role, isStreaming]);
 
   if (isSystem) {
     return (
