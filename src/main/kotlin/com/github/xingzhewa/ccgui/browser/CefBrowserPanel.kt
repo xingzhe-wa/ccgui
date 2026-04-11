@@ -2,6 +2,7 @@ package com.github.xingzhewa.ccgui.browser
 
 import com.github.xingzhewa.ccgui.application.agent.AgentsManager
 import com.github.xingzhewa.ccgui.application.agent.AgentExecutor
+import com.github.xingzhewa.ccgui.application.chat.ChatConfigManager
 import com.github.xingzhewa.ccgui.application.config.ConfigManager
 import com.github.xingzhewa.ccgui.application.context.ContextManager
 import com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine
@@ -111,12 +112,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     /** SessionStorage */
     private val sessionStorage: SessionStorage by lazy { SessionStorage.getInstance(project) }
 
-    /** 内存中的 Chat 配置（不持久化） */
-    private val chatConfig: MutableMap<String, Any?> = mutableMapOf(
-        "conversationMode" to ConversationMode.AUTO.name,
-        "currentAgentId" to null as String?,
-        "streamingEnabled" to true
-    )
+    /** ChatConfigManager - 聊天配置管理器 */
+    private val chatConfigManager: ChatConfigManager by lazy { ChatConfigManager.getInstance() }
 
     /** 连接状态 */
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -766,19 +763,23 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     // ---- Chat Config ----
 
     private fun handleGetChatConfig(queryId: Int): Any? {
-        return chatConfig.toMap()
+        return mapOf(
+            "conversationMode" to chatConfigManager.getConversationMode().name,
+            "currentAgentId" to chatConfigManager.getCurrentAgentId(),
+            "streamingEnabled" to chatConfigManager.isStreamingEnabled()
+        )
     }
 
     private fun handleUpdateChatConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
         val jsonObj = params?.asJsonObject ?: return null
         jsonObj.get("conversationMode")?.asString?.let {
-            chatConfig["conversationMode"] = it
+            chatConfigManager.setConversationMode(ConversationMode.valueOf(it))
         }
         jsonObj.get("currentAgentId")?.let { el ->
-            chatConfig["currentAgentId"] = if (el.isJsonNull) null else el.asString
+            chatConfigManager.setCurrentAgent(if (el.isJsonNull) null else el.asString)
         }
         jsonObj.get("streamingEnabled")?.asBoolean?.let {
-            chatConfig["streamingEnabled"] = it
+            chatConfigManager.setStreamingEnabled(it)
         }
         return mapOf("success" to true)
     }

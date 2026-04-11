@@ -6,7 +6,9 @@ import com.github.xingzhewa.ccgui.infrastructure.storage.ConfigStorage
 import com.github.xingzhewa.ccgui.model.config.AppConfig
 import com.github.xingzhewa.ccgui.model.config.ModelConfig
 import com.github.xingzhewa.ccgui.model.config.ProviderProfile
+import com.github.xingzhewa.ccgui.model.config.SpecialProviderIds
 import com.github.xingzhewa.ccgui.model.config.ThemeConfig
+import com.github.xingzhewa.ccgui.util.LocalSettingsReader
 import com.github.xingzhewa.ccgui.util.logger
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
@@ -125,10 +127,56 @@ class ConfigManager(private val project: Project) : Disposable {
     /**
      * 获取激活的 Profile（返回 ModelConfig）
      * 如果有激活的 profile，从中读取；否则返回默认的 modelConfig
+     *
+     * 特殊处理：
+     * - LOCAL_SETTINGS: 从 ~/.claude/settings.json 读取
+     * - CLI_LOGIN: 从 Claude CLI 的认证状态读取（暂未实现）
+     * - DISABLED: 返回禁用状态的配置
      */
     fun getActiveModelConfig(): ModelConfig {
         val config = getAppConfig()
-        val activeProfile = config.providerProfiles.find { it.id == config.activeProfileId }
+        val activeProfileId = config.activeProfileId
+
+        // 处理特殊供应商
+        when (activeProfileId) {
+            SpecialProviderIds.LOCAL_SETTINGS -> {
+                // 从本地 settings.json 读取
+                val localProvider = LocalSettingsReader.getAllProviders().firstOrNull()
+                if (localProvider != null) {
+                    // 推断 provider 类型
+                    val provider = when {
+                        localProvider.baseUrl?.contains("anthropic.com") == true -> "anthropic"
+                        localProvider.baseUrl?.contains("openai.com") == true -> "openai"
+                        localProvider.baseUrl?.contains("deepseek") == true -> "deepseek"
+                        else -> "anthropic"
+                    }
+                    return ModelConfig(
+                        provider = provider,
+                        model = localProvider.sonnetModel ?: "claude-sonnet-4-20250514",
+                        apiKey = localProvider.authToken,
+                        baseUrl = localProvider.baseUrl,
+                        sonnetModel = localProvider.sonnetModel,
+                        opusModel = localProvider.opusModel,
+                        maxModel = localProvider.maxModel
+                    )
+                }
+                // 如果本地设置不存在或解析失败，返回默认配置
+                log.warn("LOCAL_SETTINGS profile selected but no valid settings found")
+                return config.modelConfig
+            }
+            SpecialProviderIds.DISABLED -> {
+                // 禁用状态，返回空配置
+                return ModelConfig(provider = "disabled", model = "")
+            }
+            SpecialProviderIds.CLI_LOGIN -> {
+                // CLI Login 暂未实现，使用默认配置
+                log.warn("CLI_LOGIN profile not yet implemented")
+                return config.modelConfig
+            }
+        }
+
+        // 普通 profile
+        val activeProfile = config.providerProfiles.find { it.id == activeProfileId }
         return activeProfile?.toModelConfig() ?: config.modelConfig
     }
 
@@ -177,6 +225,83 @@ class ConfigManager(private val project: Project) : Disposable {
         val current = getAppConfig()
         saveAppConfig(current.copy(activeProfileId = profileId))
         log.info("Active provider profile set: $profileId")
+    }
+
+    /**
+     * 确保特殊供应商 Profile 存在
+     * 在应用启动时调用，确保 LOCAL_SETTINGS 等特殊 profile 存在
+     */
+    fun ensureSpecialProfiles() {
+        val current = getAppConfig()
+        val profiles = current.providerProfiles.toMutableList()
+        var changed = false
+
+        // 确保 LOCAL_SETTINGS profile 存在
+        if (profiles.none { it.id == SpecialProviderIds.LOCAL_SETTINGS }) {
+            profiles.add(ProviderProfile.createSpecialProvider(SpecialProviderIds.LOCAL_SETTINGS))
+            changed = true
+            log.info("Added LOCAL_SETTINGS profile")
+        }
+
+        // 如果没有激活的 profile 且本地设置存在，自动激活 LOCAL_SETTINGS
+        if (current.activeProfileId == null && LocalSettingsReader.isSettingsFileExists()) {
+            // 尝试激活第一个有效的 profile
+            val firstValidProfile = profiles.firstOrNull { it.id != SpecialProviderIds.DISABLED }
+            if (firstValidProfile != null) {
+                saveAppConfig(current.copy(providerProfiles = profiles, activeProfileId = firstValidProfile.id))
+                log.info("Auto-activated profile: ${firstValidProfile.id}")
+                return
+            }
+        }
+
+        if (changed) {
+            saveAppConfig(current.copy(providerProfiles = profiles))
+        }
+    }
+
+    /**
+     * 检查本地设置文件是否存在
+     */
+    fun isLocalSettingsAvailable(): Boolean {
+        return LocalSettingsReader.isSettingsFileExists()
+    }
+
+    /**
+     * 获取本地设置文件路径
+     */
+    fun getLocalSettingsPath(): String {
+        return LocalSettingsReader.getSettingsFilePath()
+    }
+
+    /**
+     * 从本地设置创建 Profile
+     *
+     * @param providerId 本地设置中的 provider ID
+     * @return 创建的 Profile
+     */
+    fun createProfileFromLocalSettings(providerId: String): ProviderProfile? {
+        val localProvider = LocalSettingsReader.getAllProviders().find { it.id == providerId }
+            ?: return null
+
+        val provider = when {
+            localProvider.baseUrl?.contains("anthropic.com") == true -> "anthropic"
+            localProvider.baseUrl?.contains("openai.com") == true -> "openai"
+            localProvider.baseUrl?.contains("deepseek") == true -> "deepseek"
+            else -> "anthropic"
+        }
+
+        return ProviderProfile(
+            id = "local_$providerId",
+            name = localProvider.name,
+            provider = provider,
+            source = "local",
+            model = localProvider.sonnetModel ?: "claude-sonnet-4-20250514",
+            apiKey = localProvider.authToken,
+            baseUrl = localProvider.baseUrl,
+            sonnetModel = localProvider.sonnetModel,
+            opusModel = localProvider.opusModel,
+            maxModel = localProvider.maxModel
+        )
     }
 
     /**

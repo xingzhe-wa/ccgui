@@ -1,14 +1,19 @@
 package com.github.xingzhewa.ccgui.application.orchestrator
 
 import com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient
+import com.github.xingzhewa.ccgui.adaptation.sdk.McpServersConfig
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkOptions
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkSessionManager
+import com.github.xingzhewa.ccgui.application.agent.AgentsManager
+import com.github.xingzhewa.ccgui.application.chat.ChatConfigManager
 import com.github.xingzhewa.ccgui.application.context.ContextManager
+import com.github.xingzhewa.ccgui.application.mcp.McpServerManager
 import com.github.xingzhewa.ccgui.application.session.SessionManager
 import com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.MessageAddedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionSwitchedEvent
+import com.github.xingzhewa.ccgui.model.agent.Agent
 import com.github.xingzhewa.ccgui.model.message.ChatMessage
 import com.github.xingzhewa.ccgui.model.message.MessageRole
 import com.github.xingzhewa.ccgui.model.message.MessageStatus
@@ -37,6 +42,9 @@ class ChatOrchestrator(private val project: Project) : Disposable {
     private val streamingEngine: StreamingOutputEngine by lazy { StreamingOutputEngine.getInstance(project) }
     private val sdkSessionManager: SdkSessionManager by lazy { SdkSessionManager.getInstance(project) }
     private val contextManager: ContextManager by lazy { ContextManager.getInstance(project) }
+    private val agentsManager: AgentsManager by lazy { AgentsManager.getInstance(project) }
+    private val mcpServerManager: McpServerManager by lazy { McpServerManager.getInstance(project) }
+    private val chatConfigManager: ChatConfigManager by lazy { ChatConfigManager.getInstance() }
 
     /** 是否正在处理消息 */
     private val _isProcessing = MutableStateFlow(false)
@@ -86,10 +94,8 @@ class ChatOrchestrator(private val project: Project) : Disposable {
             )
             _currentMessage.value = assistantMessage
 
-            // 3. 构建 SDK 选项
-            val sdkOptions = sdkSessionManager.buildResumeOptions(session.id, SdkOptions(
-                systemPrompt = buildSystemPrompt(session.context)
-            ))
+            // 3. 构建 SDK 选项（包含 Agent 配置和 MCP 配置）
+            val sdkOptions = buildSdkOptions(session.id, session.context)
 
             // 4. 发送消息并处理流式响应
             var fullContent = ""
@@ -146,6 +152,72 @@ class ChatOrchestrator(private val project: Project) : Disposable {
             _currentMessage.value = null
             streamingEngine.cancelStreaming()
             log.info("Current message cancelled")
+        }
+    }
+
+    /**
+     * 构建 SDK 选项（包含 Agent 配置和 MCP 配置）
+     */
+    private fun buildSdkOptions(sessionId: String, context: com.github.xingzhewa.ccgui.model.session.SessionContext): SdkOptions {
+        // 获取基础系统提示
+        val baseSystemPrompt = buildSystemPrompt(context)
+
+        // 获取当前选中的 Agent
+        val currentAgentId = chatConfigManager.getCurrentAgentId()
+        val agent = currentAgentId?.let { agentsManager.getAgent(it) }
+
+        // 合并 Agent 的系统提示
+        val systemPrompt = if (agent != null && agent.systemPrompt.isNotBlank()) {
+            buildString {
+                append(baseSystemPrompt)
+                append("\n\n--- Agent Configuration ---\n")
+                append("Agent: ${agent.name}\n")
+                append(agent.systemPrompt)
+                if (agent.capabilities.isNotEmpty()) {
+                    append("\nCapabilities: ${agent.capabilities.joinToString(", ") { it.name }}")
+                }
+            }
+        } else {
+            baseSystemPrompt
+        }
+
+        // 构建 MCP 配置
+        val mcpConfig = buildMcpConfig()
+
+        // 获取允许的工具列表
+        val allowedTools = agent?.tools?.takeIf { it.isNotEmpty() }
+
+        // 构建 SDK 选项
+        return sdkSessionManager.buildResumeOptions(sessionId, SdkOptions(
+            systemPrompt = systemPrompt,
+            mcpConfig = mcpConfig,
+            allowedTools = allowedTools
+        ))
+    }
+
+    /**
+     * 构建 MCP 服务器配置
+     */
+    private fun buildMcpConfig(): McpServersConfig? {
+        try {
+            // 获取已启用且已连接的 MCP 服务器
+            val enabledServers = mcpServerManager.getAllServers().filter { it.enabled && it.isConnected }
+            if (enabledServers.isEmpty()) {
+                return null
+            }
+
+            val servers = enabledServers.associate { server ->
+                server.name to McpServersConfig.McpServerEntry(
+                    command = server.command,
+                    args = server.args,
+                    env = server.env
+                )
+            }
+
+            return McpServersConfig(servers)
+        } catch (e: Exception) {
+            log.warn("Failed to build MCP config: ${e.message}")
+            return null
         }
     }
 

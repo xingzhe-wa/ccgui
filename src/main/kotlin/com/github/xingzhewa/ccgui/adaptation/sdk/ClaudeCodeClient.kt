@@ -4,6 +4,7 @@ import com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes.SdkInitMessage
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes.SdkAssistantMessage
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes.SdkResultMessage
 import com.github.xingzhewa.ccgui.adaptation.sdk.SdkMessageTypes.SdkMessage
+import com.github.xingzhewa.ccgui.application.config.ConfigManager
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SdkSessionInitEvent
 import com.github.xingzhewa.ccgui.util.JsonUtils
@@ -110,8 +111,21 @@ class ClaudeCodeClient(private val project: Project) : Disposable {
 
         var process: Process? = null
         try {
+            // 0. 读取活跃的模型配置（用于环境变量和模型）
+            val modelConfig = ConfigManager.getInstance(project).getActiveModelConfig()
+
+            // 如果禁用，直接返回错误
+            if (modelConfig.provider == "disabled" || modelConfig.model.isBlank()) {
+                return Result.failure(IllegalStateException("No active provider configured. Please set up your API key in settings."))
+            }
+
+            // 填充 SdkOptions 中未设置的字段（使用配置中的值）
+            val effectiveOptions = if (options.model.isNullOrBlank()) {
+                options.copy(model = modelConfig.model)
+            } else options
+
             // 1. 构建CLI命令
-            val command = configBuilder.buildCommand(prompt, options)
+            val command = configBuilder.buildCommand(prompt, effectiveOptions)
             log.info("Starting Claude CLI: ${command.joinToString(" ").take(200)}")
 
             // 2. 写入临时MCP配置文件（如有）
@@ -128,8 +142,17 @@ class ClaudeCodeClient(private val project: Project) : Disposable {
                 .redirectErrorStream(false)
                 .directory(project.basePath?.let { File(it) })
 
-            // 设置环境变量
-            options.env.forEach { (k, v) -> pb.environment()[k] = v }
+            // 4. 设置环境变量（优先使用 options 中的值，其次使用配置中的值）
+            // 从配置中获取环境变量
+            val configEnv = mutableMapOf<String, String>()
+            modelConfig.apiKey?.let { configEnv["ANTHROPIC_AUTH_TOKEN"] = it }
+            modelConfig.baseUrl?.let { configEnv["ANTHROPIC_BASE_URL"] = it }
+
+            // 合并：options.env 覆盖 configEnv
+            (configEnv + options.env).forEach { (k, v) -> pb.environment()[k] = v }
+
+            log.info("Using API config: provider=${modelConfig.provider}, model=${modelConfig.model}, " +
+                    "hasApiKey=${modelConfig.apiKey != null}, hasBaseUrl=${modelConfig.baseUrl != null}")
 
             process = pb.start()
             _state.value = ClientState.STREAMING
