@@ -4,8 +4,8 @@
  * 展示单个 Agent 的基本信息，支持编辑和删除操作。
  */
 
-import { memo, useCallback } from 'react';
-import { Edit2, Trash2, Play, Copy, Settings } from 'lucide-react';
+import { memo, useCallback, useState } from 'react';
+import { Edit2, Trash2, Play, Copy, Settings, Power } from 'lucide-react';
 import type { Agent } from '@/shared/types';
 import { AgentMode } from '@/shared/types';
 import { cn } from '@/shared/utils/cn';
@@ -32,6 +32,8 @@ export interface AgentCardProps {
   onDuplicate?: () => void;
   /** 配置回调 */
   onConfigure?: () => void;
+  /** 启用/禁用回调 */
+  onToggleEnabled?: (agent: Agent) => void;
   className?: string;
 }
 
@@ -61,8 +63,11 @@ export const AgentCard = memo<AgentCardProps>(function AgentCard({
   onStop,
   onDuplicate,
   onConfigure,
+  onToggleEnabled,
   className
 }: AgentCardProps) {
+  const [localEnabled, setLocalEnabled] = useState(agent.enabled);
+
   const handleEdit = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -111,6 +116,21 @@ export const AgentCard = memo<AgentCardProps>(function AgentCard({
     [onConfigure]
   );
 
+  const handleToggleEnabled = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newEnabled = !localEnabled;
+      setLocalEnabled(newEnabled);
+      onToggleEnabled?.({ ...agent, enabled: newEnabled });
+    },
+    [agent, localEnabled, onToggleEnabled]
+  );
+
+  // 同步外部 enabled 状态
+  useState(() => {
+    setLocalEnabled(agent.enabled);
+  });
+
   return (
     <div
       onClick={onClick}
@@ -118,7 +138,7 @@ export const AgentCard = memo<AgentCardProps>(function AgentCard({
         'group relative rounded-lg border bg-background p-4 transition-all cursor-pointer',
         'hover:shadow-md hover:border-primary/50',
         isSelected && 'border-primary bg-primary/5',
-        !agent.enabled && 'opacity-60',
+        !localEnabled && 'opacity-60',
         className
       )}
     >
@@ -138,12 +158,22 @@ export const AgentCard = memo<AgentCardProps>(function AgentCard({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          {!agent.enabled && (
-            <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground mr-2">
-              已禁用
-            </span>
-          )}
+        <div className="flex items-center gap-2">
+          {/* 启用/禁用开关 */}
+          <button
+            type="button"
+            onClick={handleToggleEnabled}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+              localEnabled
+                ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            )}
+            title={localEnabled ? '禁用 Agent' : '启用 Agent'}
+          >
+            <Power className={cn('w-3 h-3', localEnabled && 'text-green-600 dark:text-green-400')} />
+            {localEnabled ? '已启用' : '已禁用'}
+          </button>
           {isRunning && (
             <span className="text-xs px-2 py-0.5 bg-green-100 rounded text-green-700 dark:bg-green-900 dark:text-green-300">
               运行中

@@ -164,10 +164,6 @@ class JavaBridge {
     model: string;
     apiKey: string;
     baseUrl: string;
-    maxTokens: number;
-    temperature: number;
-    topP: number;
-    maxRetries: number;
   }> {
     return this.invoke('getModelConfig', {});
   }
@@ -177,12 +173,23 @@ class JavaBridge {
     model?: string;
     apiKey?: string;
     baseUrl?: string;
-    maxTokens?: number;
-    temperature?: number;
-    topP?: number;
-    maxRetries?: number;
   }): Promise<void> {
     return this.invoke('updateModelConfig', config);
+  }
+
+  // ---- Editor Integration ----
+
+  async getSelectedText(): Promise<{
+    text: string;
+    fileName: string;
+    language: string;
+    hasSelection: boolean;
+  }> {
+    return this.invoke('getSelectedText', {});
+  }
+
+  async replaceSelectedText(text: string): Promise<void> {
+    return this.invoke('replaceSelectedText', { text });
   }
 
   async getThemes(): Promise<any[]> {
@@ -296,6 +303,121 @@ class JavaBridge {
 
   async submitAnswer(questionId: string, answer: any): Promise<void> {
     return this.invoke('submitAnswer', { questionId, answer });
+  }
+
+  // ========== Chat Config ==========
+
+  async getChatConfig(): Promise<{
+    conversationMode: string;
+    currentAgentId: string | null;
+    streamingEnabled: boolean;
+  }> {
+    return this.invoke('getChatConfig', {});
+  }
+
+  async updateChatConfig(config: {
+    conversationMode?: string;
+    currentAgentId?: string | null;
+    streamingEnabled?: boolean;
+  }): Promise<void> {
+    return this.invoke('updateChatConfig', { config });
+  }
+
+  // ========== Task Status ==========
+
+  async getTaskStatus(): Promise<{
+    tasks: Array<{
+      taskId: string;
+      name: string;
+      status: string;
+      currentStep: number;
+      totalSteps: number;
+      progress: number;
+    }>;
+    activeSubagents: Array<{
+      agentId: string;
+      agentName: string;
+      taskId: string;
+      startTime: number;
+      status: string;
+    }>;
+    diffRecords: Array<Record<string, never>>;
+  }> {
+    return this.invoke('getTaskStatus', {});
+  }
+
+  // ========== Slash Commands ==========
+
+  async executeSlashCommand(command: string): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    return this.invoke('executeSlashCommand', { command });
+  }
+
+  // ========== IDE Theme ==========
+
+  async getIdeTheme(): Promise<{ isDark: boolean }> {
+    return this.invoke('getIdeTheme', {});
+  }
+
+  // ========== Provider Profiles ==========
+
+  async getProviderProfiles(): Promise<{
+    profiles: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+      sonnetModel: string;
+      opusModel: string;
+      maxModel: string;
+      maxRetries: number;
+    }>;
+    activeProfileId: string | null;
+  }> {
+    return this.invoke('getProviderProfiles', {});
+  }
+
+  async createProviderProfile(profile: {
+    id: string;
+    name: string;
+    provider?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    sonnetModel?: string;
+    opusModel?: string;
+    maxModel?: string;
+    maxRetries?: number;
+  }): Promise<{ success: boolean; id?: string }> {
+    return this.invoke('createProviderProfile', profile);
+  }
+
+  async updateProviderProfile(profile: {
+    id: string;
+    name: string;
+    provider?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    sonnetModel?: string;
+    opusModel?: string;
+    maxModel?: string;
+    maxRetries?: number;
+  }): Promise<{ success: boolean }> {
+    return this.invoke('updateProviderProfile', profile);
+  }
+
+  async deleteProviderProfile(profileId: string): Promise<{ success: boolean }> {
+    return this.invoke('deleteProviderProfile', { profileId });
+  }
+
+  async setActiveProviderProfile(profileId: string | null): Promise<{ success: boolean }> {
+    return this.invoke('setActiveProviderProfile', { profileId: profileId ?? '' });
   }
 }
 

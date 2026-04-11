@@ -31,6 +31,8 @@ export interface McpServerListProps {
   onTest?: (server: McpServer) => void;
   /** 配置服务器回调 */
   onConfigure?: (server: McpServer) => void;
+  /** 启用/禁用服务器回调 */
+  onToggleEnabled?: (server: McpServer) => void;
   className?: string;
 }
 
@@ -48,6 +50,7 @@ export const McpServerList = memo<McpServerListProps>(function McpServerList({
   onStop,
   onTest,
   onConfigure,
+  onToggleEnabled,
   className
 }: McpServerListProps) {
   if (servers.length === 0) {
@@ -75,6 +78,7 @@ export const McpServerList = memo<McpServerListProps>(function McpServerList({
           onStop={() => onStop?.(server)}
           onTest={() => onTest?.(server)}
           onConfigure={() => onConfigure?.(server)}
+          onToggleEnabled={onToggleEnabled ? (s) => onToggleEnabled(s) : undefined}
         />
       ))}
     </div>

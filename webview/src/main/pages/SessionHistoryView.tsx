@@ -16,7 +16,7 @@ const LazySessionHistory = lazy(() =>
 );
 
 export function SessionHistoryView(): JSX.Element {
-  const sessions = useAppStore((s) => s.sessions);
+  const sessions = useAppStore((s) => s.sessions.filter((s) => s.isInitialized !== false));
   const switchSession = useAppStore((s) => s.switchSession);
   const deleteSession = useAppStore((s) => s.deleteSession);
   const navigate = useNavigate();

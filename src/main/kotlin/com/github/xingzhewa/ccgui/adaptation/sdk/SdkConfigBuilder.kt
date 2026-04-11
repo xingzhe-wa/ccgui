@@ -86,6 +86,17 @@ class SdkConfigBuilder(private val project: Project) {
             command.add(it)
         }
 
+        // Extended Thinking 预算
+        options.thinkingBudgetTokens?.let {
+            command.add("--thinking-budget")
+            command.add(it.toString())
+        }
+
+        // 是否在响应中包含思考过程
+        if (options.includeThinking) {
+            command.add("--include-thinking")
+        }
+
         return command
     }
 
@@ -190,7 +201,11 @@ data class SdkOptions(
     /** 额外环境变量 */
     val env: Map<String, String> = emptyMap(),
     /** 权限提示工具名称 */
-    val permissionPromptTool: String? = null
+    val permissionPromptTool: String? = null,
+    /** Extended Thinking 预算token数 */
+    val thinkingBudgetTokens: Int? = null,
+    /** 是否在响应中包含思考过程 */
+    val includeThinking: Boolean = false
 )
 
 /**

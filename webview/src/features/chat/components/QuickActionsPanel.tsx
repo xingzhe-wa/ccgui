@@ -1,20 +1,13 @@
 /**
  * QuickActionsPanel - 快捷操作面板
  *
- * 提供7种常用代码/对话操作：复制、解释、润色、翻译、代码审查、优化、调试。
+ * 提供7种常用代码/对话操作：解释、润色、翻译、代码审查、优化、调试、生成测试。
  */
 
 import { memo, useCallback } from 'react';
 import { cn } from '@/shared/utils/cn';
 
 // ============== 图标组件 ==============
-
-const CopyIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-  </svg>
-);
 
 const ExplainIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -65,6 +58,12 @@ const DebugIcon = () => (
   </svg>
 );
 
+const TestIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </svg>
+);
+
 const ChevronIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <polyline points="6 9 12 15 18 9" />
@@ -103,12 +102,6 @@ export interface QuickActionsPanelProps {
  */
 const DEFAULT_ACTIONS: QuickAction[] = [
   {
-    id: 'copy',
-    label: '复制',
-    description: '复制到剪贴板',
-    icon: <CopyIcon />
-  },
-  {
     id: 'explain',
     label: '解释',
     description: '解释代码逻辑',
@@ -143,6 +136,12 @@ const DEFAULT_ACTIONS: QuickAction[] = [
     label: '调试',
     description: '添加调试代码',
     icon: <DebugIcon />
+  },
+  {
+    id: 'test',
+    label: '测试',
+    description: '生成单元测试',
+    icon: <TestIcon />
   }
 ];
 

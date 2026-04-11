@@ -44,6 +44,7 @@ interface InputToolbarProps {
   onStop?: () => void;
   onOptimize?: () => void;
   isStreaming?: boolean;
+  isOptimizing?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -53,6 +54,7 @@ export const InputToolbar = memo<InputToolbarProps>(function InputToolbar({
   onStop,
   onOptimize,
   isStreaming = false,
+  isOptimizing = false,
   disabled = false,
   className
 }) {
@@ -94,14 +96,19 @@ export const InputToolbar = memo<InputToolbarProps>(function InputToolbar({
 
       {onOptimize && (
         <ToolbarButton
-          icon={
+          icon={isOptimizing ? (
+            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
             </svg>
-          }
-          label="Optimize prompt"
+          )}
+          label={isOptimizing ? '优化中...' : 'Optimize prompt'}
           onClick={onOptimize}
-          disabled={disabled || isStreaming}
+          disabled={disabled || isStreaming || isOptimizing}
         />
       )}
 

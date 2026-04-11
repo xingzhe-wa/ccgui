@@ -48,7 +48,9 @@ data class ChatSession(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = false,
-    val status: SessionStatus = SessionStatus.IDLE
+    val status: SessionStatus = SessionStatus.IDLE,
+    /** 是否为待确认会话：新会话在第一次提问前为 true，提问后改为 false 并加入历史 */
+    val isPending: Boolean = true
 ) {
 
     /**
@@ -164,6 +166,12 @@ data class ChatSession(
      */
     fun withContext(newContext: SessionContext): ChatSession = copy(context = newContext, updatedAt = System.currentTimeMillis())
 
+    /**
+     * 标记会话已完成第一次提问
+     * 调用此方法后，会话将从待确认状态变为正式会话，并加入历史记录
+     */
+    fun withConfirmed(): ChatSession = copy(isPending = false, updatedAt = System.currentTimeMillis())
+
     companion object {
         /**
          * 创建项目会话
@@ -215,7 +223,8 @@ data class ChatSession(
                     createdAt = json.get("createdAt")?.asLong ?: System.currentTimeMillis(),
                     updatedAt = json.get("updatedAt")?.asLong ?: System.currentTimeMillis(),
                     isActive = json.get("isActive")?.asBoolean ?: false,
-                    status = SessionStatus.valueOf(json.get("status")?.asString ?: "IDLE")
+                    status = SessionStatus.valueOf(json.get("status")?.asString ?: "IDLE"),
+                    isPending = json.get("isPending")?.asBoolean ?: true
                 )
             } catch (e: Exception) {
                 null
@@ -240,6 +249,7 @@ data class ChatSession(
             addProperty("updatedAt", updatedAt)
             addProperty("isActive", isActive)
             addProperty("status", status.name)
+            addProperty("isPending", isPending)
         }
     }
 }

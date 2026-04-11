@@ -99,6 +99,7 @@ export interface ThemeConfig {
  * 注意：这是枚举，不是普通对象
  */
 export enum ThemePresets {
+  FOLLOW_IDEA = 'follow-idea',
   JETBRAINS_DARK = 'jetbrains-dark',
   JETBRAINS_LIGHT = 'jetbrains-light',
   GITHUB_DARK = 'github-dark',

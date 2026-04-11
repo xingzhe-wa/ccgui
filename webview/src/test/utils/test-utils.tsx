@@ -102,6 +102,7 @@ export function createMockSession(overrides?: Partial<ChatSession>): ChatSession
     updatedAt: Date.now(),
     isActive: true,
     status: SessionStatus.IDLE,
+    isInitialized: true,
     ...overrides,
   };
 }

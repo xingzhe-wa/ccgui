@@ -224,6 +224,25 @@ class AgentExecutor(private val project: Project) : Disposable {
         return activeExecutions.size
     }
 
+    /**
+     * 获取活跃执行的摘要列表
+     *
+     * @return 活跃执行列表（包含 agentId, agentName, taskId, startTime, status）
+     */
+    fun getActiveExecutionSummaries(): List<Map<String, Any>> {
+        val agentsManager = AgentsManager.getInstance(project)
+        return activeExecutions.map { (_, exec) ->
+            val agent = agentsManager.getAgent(exec.agentId)
+            mapOf(
+                "agentId" to exec.agentId,
+                "agentName" to (agent?.name ?: "Unknown"),
+                "taskId" to exec.taskId,
+                "startTime" to exec.startTime,
+                "status" to "RUNNING"
+            )
+        }
+    }
+
     // ==================== 内部方法 ====================
 
     /**

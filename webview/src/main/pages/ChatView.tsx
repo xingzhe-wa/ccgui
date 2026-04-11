@@ -1,11 +1,11 @@
 /**
  * ChatView - 聊天主页面
  *
- * 组合 MessageList + ChatInput + StreamingMessage + InteractiveQuestionPanel
- * 构成完整的聊天界面。
+ * 单栏布局：消息列表 + 输入区域
+ * 点击消息显示详情 Dialog（不再使用右侧分栏）
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { MessageList } from '@/features/chat/components/MessageList';
 import { ChatInput } from '@/features/chat/components/ChatInput';
 import { QuickActionsPanel } from '@/features/chat/components/QuickActionsPanel';
@@ -13,9 +13,11 @@ import { StreamingMessage } from '@/features/streaming/components/StreamingMessa
 import { StopButton } from '@/features/streaming/components/StopButton';
 import { InteractiveQuestionPanel } from '@/features/interaction/components/InteractiveQuestionPanel';
 import { MessageDetail } from '@/features/chat/components/PreviewPanel/MessageDetail';
+import { TaskStatusBar } from '@/main/components/TaskStatusBar';
 import { useSessionStore } from '@/shared/stores/sessionStore';
 import { useStreamingStore } from '@/shared/stores/streamingStore';
 import { useQuestionStore } from '@/shared/stores/questionStore';
+import { useAppStore } from '@/shared/stores/appStore';
 import { javaBridge } from '@/lib/java-bridge';
 import type { ChatMessage, ContentPart, MessageReference, QuestionAnswer } from '@/shared/types';
 import { MessageRole, MessageStatus } from '@/shared/types';
@@ -41,22 +43,8 @@ export const ChatView = memo(function ChatView(): JSX.Element {
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [references, setReferences] = useState<MessageReference[]>([]);
-  const [containerWidth, setContainerWidth] = useState<number>(window.innerWidth);
   const [quickActionsExpanded, setQuickActionsExpanded] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // 响应式：监听容器宽度变化，窄屏时隐藏详情面板
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
 
   const selectedMessage = useMemo(
     () => messages.find((m) => m.id === selectedMessageId) ?? null,
@@ -95,8 +83,7 @@ export const ChatView = memo(function ChatView(): JSX.Element {
       addMessage(aiMessage);
       startStreaming(aiMessageId);
 
-      // 通过 JavaBridge 通信层发送，不直接调用 window.ccBackend
-      // 包含 messageId 以便 Java 在流式事件中返回该 ID
+      // 通过 JavaBridge 通信层发送
       if (attachments && attachments.length > 0) {
         javaBridge.sendMultimodalMessage({
           sessionId: currentSessionId,
@@ -108,6 +95,12 @@ export const ChatView = memo(function ChatView(): JSX.Element {
         javaBridge.sendMessage(
           JSON.stringify({ sessionId: currentSessionId, content: fullContent, messageId: aiMessageId })
         );
+      }
+
+      // 首次发送消息后，将会话加入历史列表
+      const currentSession = useAppStore.getState().sessions.find((s) => s.id === currentSessionId);
+      if (currentSession && !currentSession.isInitialized) {
+        useAppStore.getState().markSessionInitialized(currentSessionId);
       }
 
       // 发送后清空引用
@@ -162,15 +155,29 @@ export const ChatView = memo(function ChatView(): JSX.Element {
   }, []);
 
   const handleQuickAction = useCallback(
-    (action: string) => {
-      // 构建结构化的 prompt，而非直接发送 action ID
-      const selectedText = ''; // TODO: 从编辑器获取选中代码
+    async (action: string) => {
+      // 从 IDE 编辑器获取当前选区文本
+      let selectedText = '';
+      let fileName = '';
+      let language = '';
+      try {
+        const result = await javaBridge.getSelectedText();
+        selectedText = result.text ?? '';
+        fileName = result.fileName ?? '';
+        language = result.language ?? '';
+      } catch {
+        // 非 IDE 环境 fallback
+      }
+
+      const codeLabel = language ? `\`\`\`${language}` : '```';
+      const codeBlock = selectedText
+        ? `${codeLabel}${fileName ? ` // ${fileName}` : ''}\n${selectedText}\n\`\`\``
+        : '(未选中代码)';
+
       const actionPrompts: Record<string, string> = {
         explain: `请解释以下代码的功能、关键逻辑和潜在问题：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\`
+${codeBlock}
 
 请提供：
 1. 代码功能概述
@@ -178,26 +185,18 @@ ${selectedText || "(未选中代码)"}
 3. 潜在问题或改进建议`,
         optimize: `请优化以下代码，提高性能和可读性：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\`
+${codeBlock}
 
 请提供优化后的代码和优化说明。`,
         polish: `请润色以下代码，使其表达更清晰：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\``,
+${codeBlock}`,
         translate: `请翻译以下代码注释为中文（如果已是中文则转为英文）：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\``,
+${codeBlock}`,
         review: `请对以下代码进行质量审查：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\`
+${codeBlock}
 
 请检查：
 1. 代码规范遵循情况
@@ -206,14 +205,10 @@ ${selectedText || "(未选中代码)"}
 4. 性能问题`,
         debug: `请分析以下代码并添加合适的调试代码：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\``,
+${codeBlock}`,
         test: `请为以下代码生成单元测试：
 
-\`\`\`
-${selectedText || "(未选中代码)"}
-\`\`\``
+${codeBlock}`
       };
       const prompt = actionPrompts[action] || action;
       handleSend(prompt);
@@ -229,40 +224,35 @@ ${selectedText || "(未选中代码)"}
     [setAnswer, submitAnswer]
   );
 
-  // 响应式布局：根据宽度计算布局模式
-  // PRD: <800px 单列 / 800-1200px 60:40 分栏 / >1200px 50:50 分栏
-  const layoutMode = containerWidth < 800 ? 'single' : containerWidth <= 1200 ? 'medium' : 'large';
-
-  const messageListWidth = layoutMode === 'single' ? 'w-full' : layoutMode === 'medium' ? 'w-[60%]' : 'w-[50%]';
-  const detailWidth = layoutMode === 'single' ? 'w-0' : layoutMode === 'medium' ? 'w-[40%]' : 'w-[50%]';
-
   return (
     <div ref={containerRef} className="flex h-full flex-col">
-      {/* 主内容区（消息列表 + 预览面板） */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* 消息列表 */}
-        <div className={`${messageListWidth} overflow-hidden flex-shrink-0`}>
-          <MessageList
-            messages={messages}
-            onReply={handleReply}
-            onDelete={handleDelete}
-            onCopy={handleCopy}
-            onSelect={handleSelectMessage}
-            onQuote={handleQuote}
-            selectedMessageId={selectedMessageId}
-          />
-        </div>
+      {/* 消息列表 */}
+      <div className="flex-1 overflow-hidden">
+        <MessageList
+          messages={messages}
+          onReply={handleReply}
+          onDelete={handleDelete}
+          onCopy={handleCopy}
+          onSelect={handleSelectMessage}
+          onQuote={handleQuote}
+          selectedMessageId={selectedMessageId}
+        />
+      </div>
 
-        {/* 消息详情面板 - 响应式断点：单列模式隐藏 / 中屏 40% / 大屏 50% */}
-        {selectedMessage && layoutMode !== 'single' && (
-          <div className={`${detailWidth} border-l overflow-hidden flex-shrink-0`}>
+      {/* 消息详情 Dialog - 点击消息时显示 */}
+      {selectedMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col mx-4 overflow-hidden">
             <MessageDetail
               message={selectedMessage}
               onClose={() => setSelectedMessageId(null)}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* 任务状态栏 */}
+      <TaskStatusBar />
 
       {/* 流式输出消息 */}
       {streamingMessageId && isStreaming && (
@@ -295,7 +285,7 @@ ${selectedText || "(未选中代码)"}
         </div>
       )}
 
-      {/* 快捷操作（始终显示在输入区域上方） */}
+      {/* 快捷操作 */}
       <div className="border-t px-4 py-3">
         <QuickActionsPanel
           onAction={handleQuickAction}

@@ -1,0 +1,15 @@
+{
+  "skills": {
+    "sync-pit": "ide-plugin-architect",
+    "pit-sync": "ide-plugin-architect",
+    "jcef": "ide-plugin-architect",
+    "jcef-lifecycle": "ide-plugin-architect",
+    "java-js-bridge": "ide-plugin-architect",
+    "streaming": "ide-plugin-architect",
+    "coroutine": "ide-plugin-architect",
+    "naming": "ide-plugin-architect",
+    "build": "ide-plugin-architect",
+    "plugin-dev": "ccgui-plugin-developer",
+    "frontend-dev": "ccgui-frontend-developer"
+  }
+}

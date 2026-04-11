@@ -67,6 +67,8 @@ export interface ChatSession {
   updatedAt: Timestamp;
   isActive: boolean;
   status: SessionStatus;
+  /** 会话是否已发送过第一条消息（用于延迟加入历史会话列表） */
+  isInitialized: boolean;
 }
 
 /**

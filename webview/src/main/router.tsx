@@ -1,38 +1,20 @@
 /**
  * React Router 路由配置
  *
- * 所有功能页面通过路由接入，懒加载管理类页面。
+ * 主聊天页 + 历史页 + 工具箱统一页面（包含 Skills/Agents/MCP/供应商/主题/关于）
  */
 
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { ChatView } from './pages/ChatView';
-import { SettingsView } from './pages/SettingsView';
+import { ToolsView } from './pages/ToolsView';
 import { LoadingFallback } from '@/shared/components/ui/LoadingFallback';
 
 // 懒加载次要页面
 const LazySessionHistoryView = lazy(() =>
   import('./pages/SessionHistoryView').then((m) => ({
     default: m.SessionHistoryView
-  }))
-);
-
-const LazySkillsView = lazy(() =>
-  import('./pages/SkillsView').then((m) => ({
-    default: m.SkillsView
-  }))
-);
-
-const LazyAgentsView = lazy(() =>
-  import('./pages/AgentsView').then((m) => ({
-    default: m.AgentsView
-  }))
-);
-
-const LazyMcpView = lazy(() =>
-  import('./pages/McpView').then((m) => ({
-    default: m.McpView
   }))
 );
 
@@ -54,32 +36,8 @@ const router = createBrowserRouter([
         )
       },
       {
-        path: 'skills',
-        element: (
-          <Suspense fallback={<LoadingFallback />}>
-            <LazySkillsView />
-          </Suspense>
-        )
-      },
-      {
-        path: 'agents',
-        element: (
-          <Suspense fallback={<LoadingFallback />}>
-            <LazyAgentsView />
-          </Suspense>
-        )
-      },
-      {
-        path: 'mcp',
-        element: (
-          <Suspense fallback={<LoadingFallback />}>
-            <LazyMcpView />
-          </Suspense>
-        )
-      },
-      {
-        path: 'settings',
-        element: <SettingsView />
+        path: 'tools',
+        element: <ToolsView />
       }
     ]
   }

@@ -29,7 +29,9 @@ class ConfigStorage(private val project: Project) : PersistentStateComponent<Con
         var themesConfig: String = "[]",
         var customThemes: String = "[]",
         var lastThemeId: String = "jetbrains-dark",
-        var version: Int = 1
+        var version: Int = 1,
+        /** 配置作用域: GLOBAL 或 PROJECT */
+        var scope: String = "PROJECT"
     )
 
     private var state = State()

@@ -32,6 +32,7 @@ interface AppState {
   deleteSession: (sessionId: string) => void;
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void;
   reorderSessions: (sessions: ChatSession[]) => void;
+  markSessionInitialized: (sessionId: string) => void;
 
   // UI操作
   toggleSidebar: () => void;
@@ -85,7 +86,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const session = await window.ccBackend?.createSession(name, type);
       if (session) {
-        set((state) => ({ sessions: [...state.sessions, session] }));
+        // 新会话不立即加入历史列表，等首次发送消息后才加入
+        const uninitSession = { ...session, isInitialized: false };
+        set((state) => ({ sessions: [...state.sessions, uninitSession] }));
         get().switchSession(session.id);
       }
       return session ?? null;
@@ -93,6 +96,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Failed to create session:', error);
       return null;
     }
+  },
+
+  markSessionInitialized: (sessionId) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, isInitialized: true } : s
+      )
+    }));
   },
 
   deleteSession: (sessionId) => {

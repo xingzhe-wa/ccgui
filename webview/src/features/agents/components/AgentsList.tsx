@@ -31,6 +31,8 @@ export interface AgentsListProps {
   onDuplicate?: (agent: Agent) => void;
   /** 配置 Agent 回调 */
   onConfigure?: (agent: Agent) => void;
+  /** 启用/禁用 Agent 回调 */
+  onToggleEnabled?: (agent: Agent) => void;
   className?: string;
 }
 
@@ -48,6 +50,7 @@ export const AgentsList = memo<AgentsListProps>(function AgentsList({
   onStop,
   onDuplicate,
   onConfigure,
+  onToggleEnabled,
   className
 }: AgentsListProps) {
   if (agents.length === 0) {
@@ -75,6 +78,7 @@ export const AgentsList = memo<AgentsListProps>(function AgentsList({
           onStop={() => onStop?.(agent)}
           onDuplicate={() => onDuplicate?.(agent)}
           onConfigure={() => onConfigure?.(agent)}
+          onToggleEnabled={onToggleEnabled}
         />
       ))}
     </div>

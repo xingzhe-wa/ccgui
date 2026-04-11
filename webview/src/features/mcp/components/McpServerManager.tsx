@@ -139,6 +139,14 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
     refreshServers();
   }, [refreshServers]);
 
+  // 启用/禁用
+  const handleToggleEnabled = useCallback(
+    (server: McpServer) => {
+      saveServer(server);
+    },
+    [saveServer]
+  );
+
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* 头部 */}
@@ -188,6 +196,7 @@ export const McpServerManager = memo<McpServerManagerProps>(function McpServerMa
           onStop={handleStop}
           onTest={handleTest}
           onConfigure={handleConfigure}
+          onToggleEnabled={handleToggleEnabled}
         />
       </div>
 

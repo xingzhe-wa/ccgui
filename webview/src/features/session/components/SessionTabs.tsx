@@ -6,6 +6,7 @@
  */
 
 import { memo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/shared/stores/appStore';
 import { TabItem } from './TabItem';
 import { NewSessionButton } from './NewSessionButton';
@@ -37,6 +38,7 @@ export interface SessionTabsProps {
  */
 export const SessionTabs = memo<SessionTabsProps>(function SessionTabs({ className }) {
   const { sessions, currentSessionId, switchSession, reorderSessions } = useAppStore();
+  const navigate = useNavigate();
 
   // 配置拖拽传感器，8px 移动后才触发拖拽，避免与点击冲突
   const sensors = useSensors(
@@ -69,8 +71,9 @@ export const SessionTabs = memo<SessionTabsProps>(function SessionTabs({ classNa
   const handleTabClick = useCallback(
     (sessionId: string) => {
       switchSession(sessionId);
+      navigate('/');
     },
-    [switchSession]
+    [switchSession, navigate]
   );
 
   return (

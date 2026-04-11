@@ -13,6 +13,7 @@ export const THEME_PRESET_IDS = Object.values(ThemePresets);
  * 预设主题显示名称
  */
 export const THEME_PRESET_NAMES: Record<ThemePresets, string> = {
+  [ThemePresets.FOLLOW_IDEA]: '跟随 IDEA',
   [ThemePresets.JETBRAINS_DARK]: 'JetBrains Dark',
   [ThemePresets.JETBRAINS_LIGHT]: 'JetBrains Light',
   [ThemePresets.GITHUB_DARK]: 'GitHub Dark',

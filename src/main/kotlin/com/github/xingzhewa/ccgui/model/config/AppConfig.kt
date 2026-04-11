@@ -15,7 +15,11 @@ data class AppConfig(
     val enableSpellCheck: Boolean = false,
     val maxSessionHistory: Int = 100,
     val autoSaveInterval: Long = 30000L,  // 30 秒
-    val toolWindowAnchor: String = "right"  // left / right / bottom
+    val toolWindowAnchor: String = "right",  // left / right / bottom
+    /** 多供应商配置 Profile 列表 */
+    val providerProfiles: List<ProviderProfile> = emptyList(),
+    /** 当前激活的 Profile ID */
+    val activeProfileId: String? = null
 ) {
 
     companion object {
@@ -23,6 +27,8 @@ data class AppConfig(
          * 从 JSON 反序列化
          */
         fun fromJson(json: JsonObject): AppConfig {
+            val profilesArray = json.getAsJsonArray("providerProfiles")
+            val profiles = profilesArray?.map { ProviderProfile.fromJson(it.asJsonObject) } ?: emptyList()
             return AppConfig(
                 currentThemeId = json.get("currentThemeId")?.asString ?: "jetbrains-dark",
                 conversationMode = json.get("conversationMode")?.asString?.let {
@@ -37,7 +43,9 @@ data class AppConfig(
                 enableSpellCheck = json.get("enableSpellCheck")?.asBoolean ?: false,
                 maxSessionHistory = json.get("maxSessionHistory")?.asInt ?: 100,
                 autoSaveInterval = json.get("autoSaveInterval")?.asLong ?: 30000L,
-                toolWindowAnchor = json.get("toolWindowAnchor")?.asString ?: "right"
+                toolWindowAnchor = json.get("toolWindowAnchor")?.asString ?: "right",
+                providerProfiles = profiles,
+                activeProfileId = json.get("activeProfileId")?.asString
             )
         }
     }
@@ -57,6 +65,10 @@ data class AppConfig(
             addProperty("maxSessionHistory", maxSessionHistory)
             addProperty("autoSaveInterval", autoSaveInterval)
             addProperty("toolWindowAnchor", toolWindowAnchor)
+            add("providerProfiles", com.google.gson.JsonArray().apply {
+                providerProfiles.forEach { add(it.toJson()) }
+            })
+            activeProfileId?.let { addProperty("activeProfileId", it) }
         }
     }
 }

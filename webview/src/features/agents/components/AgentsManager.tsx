@@ -116,9 +116,14 @@ export const AgentsManager = memo<AgentsManagerProps>(function AgentsManager({
 
   // 配置
   const handleConfigure = useCallback((agent: Agent) => {
-    // TODO: 打开配置面板
-    console.log('Configure agent:', agent.id);
+    setEditingAgent(agent);
+    setIsCreating(false);
   }, []);
+
+  // 启用/禁用
+  const handleToggleEnabled = useCallback((agent: Agent) => {
+    updateAgent(agent);
+  }, [updateAgent]);
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -165,6 +170,7 @@ export const AgentsManager = memo<AgentsManagerProps>(function AgentsManager({
           onStop={handleStop}
           onDuplicate={handleDuplicate}
           onConfigure={handleConfigure}
+          onToggleEnabled={handleToggleEnabled}
         />
       </div>
 

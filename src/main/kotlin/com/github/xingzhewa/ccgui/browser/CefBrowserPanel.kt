@@ -3,16 +3,21 @@ package com.github.xingzhewa.ccgui.browser
 import com.github.xingzhewa.ccgui.application.agent.AgentsManager
 import com.github.xingzhewa.ccgui.application.agent.AgentExecutor
 import com.github.xingzhewa.ccgui.application.config.ConfigManager
+import com.github.xingzhewa.ccgui.application.context.ContextManager
 import com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine
 import com.github.xingzhewa.ccgui.application.mcp.McpServerManager
 import com.github.xingzhewa.ccgui.application.multimodal.MultimodalInputHandler
 import com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer
 import com.github.xingzhewa.ccgui.application.session.SessionManager
+import com.github.xingzhewa.ccgui.infrastructure.storage.SessionStorage
 import com.github.xingzhewa.ccgui.application.skill.SkillExecutor
 import com.github.xingzhewa.ccgui.application.skill.SkillsManager
+import com.github.xingzhewa.ccgui.application.task.TaskProgressTracker
 import com.github.xingzhewa.ccgui.bridge.BridgeManager
 import com.github.xingzhewa.ccgui.bridge.ConnectionState
 import com.github.xingzhewa.ccgui.model.agent.Agent
+import com.github.xingzhewa.ccgui.model.config.ConversationMode
+import com.github.xingzhewa.ccgui.model.message.MessageRole
 import com.github.xingzhewa.ccgui.model.interaction.QuestionType
 import com.github.xingzhewa.ccgui.model.mcp.McpServer
 import com.github.xingzhewa.ccgui.model.session.ChatSession
@@ -21,6 +26,8 @@ import com.github.xingzhewa.ccgui.model.skill.Skill
 import com.github.xingzhewa.ccgui.util.JsonUtils
 import com.github.xingzhewa.ccgui.util.logger
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefJSQuery
@@ -94,6 +101,22 @@ class CefBrowserPanel(private val project: Project) : Disposable {
 
     /** MultimodalInputHandler */
     private val multimodalInputHandler: MultimodalInputHandler by lazy { MultimodalInputHandler.getInstance(project) }
+
+    /** ContextManager */
+    private val contextManager: ContextManager by lazy { ContextManager.getInstance(project) }
+
+    /** TaskProgressTracker */
+    private val taskProgressTracker: TaskProgressTracker by lazy { TaskProgressTracker.getInstance(project) }
+
+    /** SessionStorage */
+    private val sessionStorage: SessionStorage by lazy { SessionStorage.getInstance(project) }
+
+    /** 内存中的 Chat 配置（不持久化） */
+    private val chatConfig: MutableMap<String, Any?> = mutableMapOf(
+        "conversationMode" to ConversationMode.AUTO.name,
+        "currentAgentId" to null as String?,
+        "streamingEnabled" to true
+    )
 
     /** 连接状态 */
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -222,11 +245,24 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 "updateConfig" -> handleUpdateConfig(queryId, params)
                 "getModelConfig" -> handleGetModelConfig(queryId, params)
                 "updateModelConfig" -> handleUpdateModelConfig(queryId, params)
+                "getProviders" -> handleGetProviders(queryId)
+                "getProviderModels" -> handleGetProviderModels(queryId, params)
+                // Provider Profiles
+                "getProviderProfiles" -> handleGetProviderProfiles(queryId)
+                "createProviderProfile" -> handleCreateProviderProfile(queryId, params)
+                "updateProviderProfile" -> handleUpdateProviderProfile(queryId, params)
+                "deleteProviderProfile" -> handleDeleteProviderProfile(queryId, params)
+                "setActiveProviderProfile" -> handleSetActiveProviderProfile(queryId, params)
+                "reorderProviderProfiles" -> handleReorderProviderProfiles(queryId, params)
+                "convertCcSwitchProfile" -> handleConvertCcSwitchProfile(queryId, params)
+                // Theme
                 "updateTheme" -> handleUpdateTheme(queryId, params)
                 "getThemes" -> handleGetThemes(queryId)
                 "saveCustomTheme" -> handleSaveCustomTheme(queryId, params)
                 "deleteCustomTheme" -> handleDeleteCustomTheme(queryId, params)
                 "optimizePrompt" -> handleOptimizePrompt(queryId, params)
+                // IDE Theme
+                "getIdeTheme" -> handleGetIdeTheme(queryId)
                 // Session
                 "createSession" -> handleCreateSession(queryId, params)
                 "switchSession" -> handleSwitchSession(queryId, params)
@@ -254,6 +290,23 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 "testMcpServer" -> handleTestMcpServer(queryId, params)
                 // Interactive
                 "submitAnswer" -> handleSubmitAnswer(queryId, params)
+                // Chat Config
+                "getChatConfig" -> handleGetChatConfig(queryId)
+                "updateChatConfig" -> handleUpdateChatConfig(queryId, params)
+                // Conversation Mode
+                "getConversationModes" -> handleGetConversationModes(queryId)
+                // Settings
+                "openSettings" -> handleOpenSettings(queryId, params)
+                // Session
+                "getHistorySessions" -> handleGetHistorySessions(queryId)
+                "confirmSession" -> handleConfirmSession(queryId, params)
+                // Task Status
+                "getTaskStatus" -> handleGetTaskStatus(queryId)
+                // Slash Commands
+                "executeSlashCommand" -> handleExecuteSlashCommand(queryId, params)
+                // Editor Integration
+                "getSelectedText" -> handleGetSelectedText(queryId)
+                "replaceSelectedText" -> handleReplaceSelectedText(queryId, params)
                 else -> {
                     log.warn("Unknown action: $action")
                     null
@@ -406,9 +459,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
             "conversationMode" to config.conversationMode.name,
             "modelConfig" to mapOf(
                 "provider" to config.modelConfig.provider,
-                "model" to config.modelConfig.model,
-                "maxTokens" to config.modelConfig.maxTokens,
-                "temperature" to config.modelConfig.temperature
+                "model" to config.modelConfig.model
             ),
             "autoConnect" to config.autoConnect,
             "streamOutput" to config.streamOutput,
@@ -567,34 +618,318 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     // ---- Model Config ----
 
     private fun handleGetModelConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
-        val config = configManager.getAppConfig()
-        val modelConfig = config.modelConfig
+        // 优先从激活的 Profile 读取，兼容无 Profile 场景
+        val modelConfig = configManager.getActiveModelConfig()
         return mapOf(
             "provider" to modelConfig.provider,
             "model" to modelConfig.model,
             "apiKey" to (modelConfig.apiKey ?: ""),
             "baseUrl" to (modelConfig.baseUrl ?: ""),
-            "maxTokens" to modelConfig.maxTokens,
-            "temperature" to modelConfig.temperature,
-            "topP" to modelConfig.topP,
             "maxRetries" to modelConfig.maxRetries
         )
     }
 
     private fun handleUpdateModelConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
         val jsonObj = params?.asJsonObject ?: return null
-        val current = configManager.getAppConfig()
+        val currentAppConfig = configManager.getAppConfig()
+        val activeProfileId = currentAppConfig.activeProfileId
+        val currentModelConfig = configManager.getActiveModelConfig()
+
         val updatedModelConfig = com.github.xingzhewa.ccgui.model.config.ModelConfig(
-            provider = jsonObj.get("provider")?.asString ?: current.modelConfig.provider,
-            model = jsonObj.get("model")?.asString ?: current.modelConfig.model,
-            apiKey = jsonObj.get("apiKey")?.asString?.takeIf { it.isNotEmpty() } ?: current.modelConfig.apiKey,
-            baseUrl = jsonObj.get("baseUrl")?.asString?.takeIf { it.isNotEmpty() } ?: current.modelConfig.baseUrl,
-            maxTokens = jsonObj.get("maxTokens")?.asInt ?: current.modelConfig.maxTokens,
-            temperature = jsonObj.get("temperature")?.asDouble ?: current.modelConfig.temperature,
-            topP = jsonObj.get("topP")?.asDouble ?: current.modelConfig.topP,
-            maxRetries = jsonObj.get("maxRetries")?.asInt ?: current.modelConfig.maxRetries
+            provider = jsonObj.get("provider")?.asString ?: currentModelConfig.provider,
+            model = jsonObj.get("model")?.asString ?: currentModelConfig.model,
+            apiKey = jsonObj.get("apiKey")?.asString?.takeIf { it.isNotEmpty() } ?: currentModelConfig.apiKey,
+            baseUrl = jsonObj.get("baseUrl")?.asString?.takeIf { it.isNotEmpty() } ?: currentModelConfig.baseUrl,
+            maxRetries = jsonObj.get("maxRetries")?.asInt ?: currentModelConfig.maxRetries
         )
-        configManager.updateModelConfig(updatedModelConfig)
+
+        // 如果有激活的 Profile，更新 Profile；否则更新默认 modelConfig
+        if (activeProfileId != null) {
+            val profile = currentAppConfig.providerProfiles.find { it.id == activeProfileId }
+            if (profile != null) {
+                configManager.saveProviderProfile(profile.copy(
+                    provider = updatedModelConfig.provider,
+                    model = updatedModelConfig.model,
+                    apiKey = updatedModelConfig.apiKey,
+                    baseUrl = updatedModelConfig.baseUrl,
+                    maxRetries = updatedModelConfig.maxRetries
+                ))
+            }
+        } else {
+            configManager.updateModelConfig(updatedModelConfig)
+        }
+        return mapOf("success" to true)
+    }
+
+    private fun handleGetProviders(queryId: Int): Any? {
+        return com.github.xingzhewa.ccgui.model.config.ModelConfig.getAllProviders()
+    }
+
+    private fun handleGetProviderModels(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val provider = params?.asJsonObject?.get("provider")?.asString ?: "anthropic"
+        return com.github.xingzhewa.ccgui.model.config.ModelConfig.getProviderModels(provider)
+    }
+
+    // ---- Provider Profiles ----
+
+    private fun handleGetProviderProfiles(queryId: Int): Any? {
+        val profiles = configManager.getProviderProfiles()
+        val activeId = configManager.getActiveProfileId()
+        val profilesData = profiles.map { profile ->
+            mapOf(
+                "id" to profile.id,
+                "name" to profile.name,
+                "provider" to profile.provider,
+                "source" to profile.source,
+                "model" to profile.model,
+                "apiKey" to (profile.apiKey ?: ""),
+                "baseUrl" to (profile.baseUrl ?: ""),
+                "sonnetModel" to (profile.sonnetModel ?: ""),
+                "opusModel" to (profile.opusModel ?: ""),
+                "maxModel" to (profile.maxModel ?: ""),
+                "maxRetries" to profile.maxRetries,
+                "createdAt" to profile.createdAt,
+                "updatedAt" to profile.updatedAt
+            )
+        }
+        return mapOf(
+            "profiles" to profilesData,
+            "activeProfileId" to activeId
+        )
+    }
+
+    private fun handleCreateProviderProfile(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val profile = com.github.xingzhewa.ccgui.model.config.ProviderProfile.fromJson(jsonObj)
+        configManager.saveProviderProfile(profile)
+        return mapOf("success" to true, "id" to profile.id)
+    }
+
+    private fun handleUpdateProviderProfile(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val profile = com.github.xingzhewa.ccgui.model.config.ProviderProfile.fromJson(jsonObj)
+        configManager.saveProviderProfile(profile)
+        return mapOf("success" to true)
+    }
+
+    private fun handleDeleteProviderProfile(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val profileId = params?.asJsonObject?.get("profileId")?.asString ?: return null
+        configManager.deleteProviderProfile(profileId)
+        return mapOf("success" to true)
+    }
+
+    private fun handleSetActiveProviderProfile(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val profileId = jsonObj.get("profileId")?.asString?.takeIf { it.isNotEmpty() }
+        configManager.setActiveProviderProfile(profileId)
+        return mapOf("success" to true)
+    }
+
+    /**
+     * 重新排序 Provider Profiles
+     */
+    private fun handleReorderProviderProfiles(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val orderedIdsArray = jsonObj.get("orderedIds")?.asJsonArray ?: return null
+        val orderedIds = orderedIdsArray.map { it.asString }
+        configManager.reorderProviderProfiles(orderedIds)
+        return mapOf("success" to true)
+    }
+
+    /**
+     * 转换 cc-switch 配置为本地配置
+     */
+    private fun handleConvertCcSwitchProfile(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val profileId = params?.asJsonObject?.get("profileId")?.asString ?: return null
+        val newProfile = configManager.convertCcSwitchProfile(profileId)
+        return if (newProfile != null) {
+            mapOf("success" to true, "profile" to mapOf(
+                "id" to newProfile.id,
+                "name" to newProfile.name,
+                "provider" to newProfile.provider,
+                "source" to newProfile.source,
+                "model" to newProfile.model,
+                "apiKey" to (newProfile.apiKey ?: ""),
+                "baseUrl" to (newProfile.baseUrl ?: ""),
+                "sonnetModel" to (newProfile.sonnetModel ?: ""),
+                "opusModel" to (newProfile.opusModel ?: ""),
+                "maxModel" to (newProfile.maxModel ?: ""),
+                "maxRetries" to newProfile.maxRetries,
+                "createdAt" to newProfile.createdAt,
+                "updatedAt" to newProfile.updatedAt
+            ))
+        } else {
+            mapOf("success" to false, "error" to "Failed to convert profile")
+        }
+    }
+
+    // ---- Chat Config ----
+
+    private fun handleGetChatConfig(queryId: Int): Any? {
+        return chatConfig.toMap()
+    }
+
+    private fun handleUpdateChatConfig(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        jsonObj.get("conversationMode")?.asString?.let {
+            chatConfig["conversationMode"] = it
+        }
+        jsonObj.get("currentAgentId")?.let { el ->
+            chatConfig["currentAgentId"] = if (el.isJsonNull) null else el.asString
+        }
+        jsonObj.get("streamingEnabled")?.asBoolean?.let {
+            chatConfig["streamingEnabled"] = it
+        }
+        return mapOf("success" to true)
+    }
+
+    // ---- Conversation Mode ----
+
+    private fun handleGetConversationModes(queryId: Int): Any? {
+        return ConversationMode.getAllModeDescriptions()
+    }
+
+    // ---- Settings ----
+
+    private fun handleOpenSettings(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val tabId = params?.asJsonObject?.get("tabId")?.asString
+        // 发送事件通知前端打开设置面板
+        sendToJavaScript("ui.settings.open", mapOf("tabId" to (tabId ?: "")))
+        return mapOf("success" to true)
+    }
+
+    // ---- Session ----
+
+    private fun handleGetHistorySessions(queryId: Int): Any? {
+        val sessions = sessionManager.getHistorySessions()
+        return sessions.map { session ->
+            mapOf(
+                "id" to session.id,
+                "name" to session.name,
+                "type" to session.type.name,
+                "messageCount" to session.messages.size,
+                "createdAt" to session.createdAt,
+                "updatedAt" to session.updatedAt,
+                "isPending" to session.isPending
+            )
+        }
+    }
+
+    private fun handleConfirmSession(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return null
+        sessionManager.confirmSession(sessionId)
+        return mapOf("success" to true)
+    }
+
+    // ---- Task Status ----
+
+    private fun handleGetTaskStatus(queryId: Int): Any? {
+        val tasks = taskProgressTracker.getActiveTasks().map { task ->
+            mapOf(
+                "taskId" to task.taskId,
+                "name" to task.name,
+                "status" to task.status.name,
+                "currentStep" to task.currentStepIndex,
+                "totalSteps" to task.steps.size,
+                "progress" to task.progress
+            )
+        }
+        val subagents = agentExecutor.getActiveExecutionSummaries()
+        return mapOf(
+            "tasks" to tasks,
+            "activeSubagents" to subagents,
+            "diffRecords" to emptyList<Map<String, Any>>()  // Diff 解析后续在 Phase 4 实现
+        )
+    }
+
+    // ---- Slash Commands ----
+
+    private fun handleExecuteSlashCommand(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val command = jsonObj.get("command")?.asString ?: return null
+        val sessionId = sessionManager.getCurrentSession()?.id ?: return null
+
+        return when {
+            command.startsWith("/compact") -> {
+                scope.launch {
+                    contextManager.compact(sessionId)
+                }
+                mapOf("success" to true, "message" to "Context compaction triggered")
+            }
+            command.startsWith("/clear") -> {
+                scope.launch {
+                    sessionManager.clearSession(sessionId)
+                }
+                mapOf("success" to true, "message" to "Session cleared")
+            }
+            command.startsWith("/retry") -> {
+                // 重试上一条消息：从当前会话获取最后一条用户消息，重新发送
+                val lastUserMessage = sessionManager.getSession(sessionId)
+                    ?.messages
+                    ?.filter { it.role == MessageRole.USER }
+                    ?.lastOrNull()
+                if (lastUserMessage != null) {
+                    bridgeManager.streamMessage(
+                        message = lastUserMessage.content,
+                        sessionId = sessionId,
+                        callback = object : com.github.xingzhewa.ccgui.bridge.StreamCallback {
+                            override fun onStreamStart() {}
+                            override fun onLineReceived(line: String) {}
+                            override fun onStreamComplete(leaves: List<String>) {}
+                            override fun onStreamError(error: String) {}
+                            override fun onStreamCancelled() {}
+                        },
+                        onResponse = null
+                    )
+                }
+                mapOf("success" to true, "message" to "Retry triggered")
+            }
+            command.startsWith("/export") -> {
+                val session = sessionManager.getSession(sessionId)
+                mapOf(
+                    "success" to true,
+                    "session" to mapOf(
+                        "id" to session?.id,
+                        "name" to session?.name,
+                        "messageCount" to (session?.messages?.size ?: 0)
+                    )
+                )
+            }
+            else -> {
+                mapOf("success" to false, "error" to "Unknown command: $command")
+            }
+        }
+    }
+
+    // ---- Editor Integration ----
+
+    private fun handleGetSelectedText(queryId: Int): Any? {
+        val editor = FileEditorManager.getInstance(project).selectedTextEditor
+        val selectedText = editor?.selectionModel?.selectedText ?: ""
+        val fileName = editor?.virtualFile?.name ?: ""
+        val language = editor?.virtualFile?.extension ?: ""
+        return mapOf(
+            "text" to selectedText,
+            "fileName" to fileName,
+            "language" to language,
+            "hasSelection" to selectedText.isNotEmpty()
+        )
+    }
+
+    private fun handleReplaceSelectedText(queryId: Int, params: com.google.gson.JsonElement?): Any? {
+        val jsonObj = params?.asJsonObject ?: return null
+        val newText = jsonObj.get("text")?.asString ?: return null
+        val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return null
+        val selectionModel = editor.selectionModel
+        if (!selectionModel.hasSelection()) {
+            return mapOf("success" to false, "error" to "No text selected")
+        }
+        val start = selectionModel.selectionStart
+        val end = selectionModel.selectionEnd
+        WriteCommandAction.runWriteCommandAction(project) {
+            editor.document.replaceString(start, end, newText)
+            selectionModel.removeSelection()
+        }
         return mapOf("success" to true)
     }
 
@@ -675,6 +1010,13 @@ class CefBrowserPanel(private val project: Project) : Disposable {
             }
         }
         return null  // async response
+    }
+
+    // ---- IDE Theme ----
+
+    private fun handleGetIdeTheme(queryId: Int): Any? {
+        val isDark = com.intellij.util.ui.UIUtil.isUnderDarcula()
+        return mapOf("isDark" to isDark)
     }
 
     // ---- Session ----

@@ -7,6 +7,7 @@ import { JcefBrowser } from './components/JcefBrowser';
 import { AppRouter } from './router';
 import { useAppStore } from '@/shared/stores';
 import { useQuestionStore } from '@/shared/stores/questionStore';
+import { useChatConfigStore } from '@/shared/stores/chatConfigStore';
 import type { InteractiveQuestion } from '@/shared/types/interaction';
 
 interface ErrorBoundaryState {
@@ -85,9 +86,45 @@ function App(): JSX.Element {
     };
   }, [handleStreamingQuestion]);
 
+  // 订阅 task:progress 事件
+  useEffect(() => {
+    const handler = (data: any) => {
+      console.debug('[App] task:progress event:', data);
+      // Task status will be handled by TaskStatusBar in Phase 4
+    };
+    window.ccEvents?.on('task:progress', handler);
+    return () => {
+      window.ccEvents?.off('task:progress', handler);
+    };
+  }, []);
+
+  // 订阅 MCP server status 事件
+  useEffect(() => {
+    const handleMcpServerStatus = (data: any) => {
+      console.debug('[App] mcp:serverStatus event:', data);
+    };
+    window.ccEvents?.on('mcp:serverStatus', handleMcpServerStatus);
+    return () => {
+      window.ccEvents?.off('mcp:serverStatus', handleMcpServerStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleMcpTestResult = (data: any) => {
+      console.debug('[App] mcp:testResult event:', data);
+    };
+    window.ccEvents?.on('mcp:testResult', handleMcpTestResult);
+    return () => {
+      window.ccEvents?.off('mcp:testResult', handleMcpTestResult);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
-      <JcefBrowser onReady={() => useAppStore.getState().initializeSessions()}>
+      <JcefBrowser onReady={() => {
+        useAppStore.getState().initializeSessions();
+        useChatConfigStore.getState().loadChatConfig();
+      }}>
         <Suspense fallback={<LoadingFallback />}>
           <AppRouter />
         </Suspense>

@@ -68,6 +68,7 @@ const mockSessions: ChatSession[] = [
     updatedAt: Date.now(),
     isActive: true,
     status: SessionStatus.IDLE,
+    isInitialized: true,
   },
   {
     id: 'session-2',
@@ -79,6 +80,7 @@ const mockSessions: ChatSession[] = [
     updatedAt: Date.now() - 120000,
     isActive: false,
     status: SessionStatus.IDLE,
+    isInitialized: true,
   },
 ];
 
@@ -431,6 +433,7 @@ const mockBackend: JavaBackendAPI = {
               updatedAt: Date.now(),
               isActive: true,
               status: SessionStatus.IDLE,
+              isInitialized: true,
             }
           });
           break;
@@ -482,6 +485,7 @@ const mockBackend: JavaBackendAPI = {
     updatedAt: Date.now(),
     isActive: true,
     status: SessionStatus.IDLE,
+    isInitialized: true,
   }),
   switchSession: async () => {},
   deleteSession: async () => {},
@@ -519,6 +523,74 @@ const mockBackend: JavaBackendAPI = {
 
   // 交互问答
   submitAnswer: async () => {},
+
+  // Chat Config
+  getChatConfig: async () => ({
+    conversationMode: 'AUTO',
+    currentAgentId: null,
+    streamingEnabled: true,
+  }),
+
+  updateChatConfig: async () => {},
+
+  // Task Status
+  getTaskStatus: async () => ({
+    tasks: [],
+    activeSubagents: [],
+    diffRecords: [],
+  }),
+
+  // Slash Commands
+  executeSlashCommand: async (command: string) => ({
+    success: true,
+    message: `Executed: ${command}`,
+  }),
+
+  // Provider Profiles
+  getProviderProfiles: async () => ({
+    profiles: [],
+    activeProfileId: null,
+  }),
+
+  createProviderProfile: async (_profile: any) => ({
+    success: true,
+    id: `profile-${Date.now()}`,
+  }),
+
+  updateProviderProfile: async (_profile: any) => ({
+    success: true,
+  }),
+
+  deleteProviderProfile: async (_profileId: string) => ({
+    success: true,
+  }),
+
+  setActiveProviderProfile: async (_profileId: string | null) => ({
+    success: true,
+  }),
+
+  reorderProviderProfiles: async (_orderedIds: string[]) => ({
+    success: true,
+  }),
+
+  convertCcSwitchProfile: async (_profileId: string) => ({
+    success: true,
+    profile: {
+      id: 'converted-local',
+      name: 'Converted Profile (Local)',
+      provider: 'anthropic',
+      source: 'local',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: '',
+      baseUrl: '',
+      sonnetModel: 'claude-sonnet-4-20250514',
+      opusModel: 'claude-opus-4-20250514',
+      maxModel: 'claude-3-5-haiku-20250514',
+      maxRetries: 3,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  }),
 };
 
 // ============ 注入 ============

@@ -6,13 +6,16 @@ import { memo, useState, useRef, useEffect } from 'react';
 import { useTheme } from '@/shared/hooks';
 import { cn } from '@/shared/utils/cn';
 import { ThemePresets } from '@/shared/types';
+import { javaBridge } from '@/lib/java-bridge';
 
 interface ThemeSwitcherProps {
   className?: string;
 }
 
 const THEME_OPTIONS: Array<{ value: ThemePresets; label: string; color: string }> = [
+  { value: ThemePresets.FOLLOW_IDEA, label: '跟随 IDEA', color: 'hsl(220, 14%, 71%)' },
   { value: ThemePresets.JETBRAINS_DARK, label: 'JetBrains Dark', color: 'hsl(217, 91%, 60%)' },
+  { value: ThemePresets.JETBRAINS_LIGHT, label: 'JetBrains Light', color: 'hsl(210, 20%, 96%)' },
   { value: ThemePresets.GITHUB_DARK, label: 'GitHub Dark', color: 'hsl(210, 100%, 67%)' },
   { value: ThemePresets.VS_CODE_DARK, label: 'VSCode Dark', color: 'hsl(0, 100%, 50%)' },
   { value: ThemePresets.MONOKAI, label: 'Monokai', color: 'hsl(330, 100%, 65%)' },
@@ -43,8 +46,18 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
     };
   }, [isOpen]);
 
-  const handleSelect = (preset: ThemePresets) => {
-    setPresetTheme(preset);
+  const handleSelect = async (preset: ThemePresets) => {
+    if (preset === ThemePresets.FOLLOW_IDEA) {
+      try {
+        const { isDark } = await javaBridge.getIdeTheme();
+        setPresetTheme(isDark ? ThemePresets.JETBRAINS_DARK : ThemePresets.JETBRAINS_LIGHT);
+      } catch {
+        // fallback to dark
+        setPresetTheme(ThemePresets.JETBRAINS_DARK);
+      }
+    } else {
+      setPresetTheme(preset);
+    }
     setIsOpen(false);
   };
 
@@ -54,7 +67,7 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-md',
+          'flex items-center gap-2 px-3 py-2 rounded-md w-full',
           'bg-background-secondary hover:bg-background-elevated',
           'border border-border transition-colors',
           'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
@@ -80,7 +93,7 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
       {isOpen && (
         <ul
           className={cn(
-            'absolute z-50 top-full left-0 mt-1 w-full min-w-[180px]',
+            'absolute z-[10000] bottom-full left-0 mb-1 w-full min-w-[180px]',
             'bg-background-elevated border border-border rounded-md shadow-lg',
             'py-1 overflow-hidden'
           )}

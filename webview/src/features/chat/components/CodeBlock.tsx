@@ -4,6 +4,7 @@
 
 import { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import { cn } from '@/shared/utils/cn';
+import { javaBridge } from '@/lib/java-bridge';
 import hljs from 'highlight.js';
 
 interface CodeBlockProps {
@@ -20,6 +21,7 @@ export const CodeBlock = memo<CodeBlockProps>(function CodeBlock({
   className
 }) {
   const [copied, setCopied] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   // Cleanup timeout on unmount or when copied changes
   useEffect(() => {
@@ -30,12 +32,29 @@ export const CodeBlock = memo<CodeBlockProps>(function CodeBlock({
     return undefined;
   }, [copied]);
 
+  useEffect(() => {
+    if (applied) {
+      const timer = setTimeout(() => setApplied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [applied]);
+
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
     } catch (error) {
       console.error('Failed to copy:', error);
+    }
+  }, [code]);
+
+  const handleApplyToEditor = useCallback(async () => {
+    try {
+      await javaBridge.replaceSelectedText(code);
+      setApplied(true);
+    } catch (error) {
+      console.error('Failed to apply to editor:', error);
     }
   }, [code]);
 
@@ -50,39 +69,69 @@ export const CodeBlock = memo<CodeBlockProps>(function CodeBlock({
   return (
     <div className={cn('group relative rounded-lg overflow-hidden bg-code-background', className)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-code-background/80 border-b border-border">
-        <span className="text-xs text-code-foreground/60 font-mono">{language || 'plaintext'}</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded text-xs',
-            'bg-transparent hover:bg-white/10 transition-colors',
-            'text-code-foreground/60 hover:text-code-foreground'
-          )}
-          aria-label="Copy code"
-        >
-          {copied ? (
-            <>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>Copied!</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-              <span>Copy</span>
-            </>
-          )}
-        </button>
+      <div className="flex items-center justify-between px-4 py-2 bg-code-background/90 border-b border-border/50">
+        <span className="text-xs text-code-foreground/50 font-mono">{language || 'plaintext'}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleApplyToEditor}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded text-xs',
+              'bg-transparent hover:bg-white/10 transition-colors',
+              'text-code-foreground/50 hover:text-code-foreground'
+            )}
+            aria-label="Apply to editor"
+          >
+            {applied ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Applied!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Apply</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium',
+              'transition-all',
+              copied
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-white/5 hover:bg-white/15 text-code-foreground/70 hover:text-code-foreground'
+            )}
+            aria-label="Copy code"
+          >
+            {copied ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>已复制!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                <span>复制代码</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Code Content */}

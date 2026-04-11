@@ -132,9 +132,9 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
   return (
     <div
       className={cn(
-        'group relative flex gap-3 py-4 px-4 cursor-pointer',
+        'group relative flex gap-3 py-4 px-4 cursor-pointer transition-colors hover:bg-muted/30',
         isUser ? 'flex-row-reverse' : 'flex-row',
-        !isHovered && !isUser && 'opacity-70',
+        !isHovered && !isUser && 'opacity-80',
         isSelected && !isUser && 'ring-2 ring-primary rounded-lg',
         className
       )}
@@ -145,7 +145,7 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
       {/* Avatar */}
       <div
         className={cn(
-          'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
+          'flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-sm',
           isUser ? 'bg-userMessage text-userMessage-foreground' : 'bg-aiMessage text-aiMessage-foreground'
         )}
       >
@@ -163,17 +163,17 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
       {/* Message Bubble */}
       <div
         className={cn(
-          'flex flex-col gap-1 max-w-[70%]',
+          'flex flex-col gap-1 max-w-[80%]',
           isUser ? 'items-end' : 'items-start'
         )}
       >
         {/* Message Content */}
         <div
           className={cn(
-            'relative px-4 py-3 rounded-2xl',
+            'relative px-4 py-3 rounded-2xl shadow-sm border',
             isUser
-              ? 'bg-userMessage text-userMessage-foreground rounded-tr-md'
-              : 'bg-aiMessage text-aiMessage-foreground rounded-tl-md'
+              ? 'bg-userMessage text-userMessage-foreground rounded-tr-md border-userMessage/20'
+              : 'bg-aiMessage text-aiMessage-foreground rounded-tl-md border-aiMessage/10'
           )}
         >
           {renderedContent}
@@ -197,16 +197,18 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
               isHovered ? 'opacity-100' : 'opacity-0'
             )}
           >
-            <button
-              type="button"
-              onClick={handleReply}
-              className="p-1 rounded hover:bg-background-secondary transition-colors"
-              aria-label="Reply"
-            >
-              <svg className="w-3.5 h-3.5 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-              </svg>
-            </button>
+            {!isUser && (
+              <button
+                type="button"
+                onClick={handleReply}
+                className="p-1 rounded hover:bg-background-secondary transition-colors"
+                aria-label="Reply"
+              >
+                <svg className="w-3.5 h-3.5 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </button>
+            )}
 
             <button
               type="button"
@@ -219,17 +221,19 @@ export const MessageItem = memo<MessageItemProps>(function MessageItem({
               </svg>
             </button>
 
-            <button
-              type="button"
-              onClick={handleQuote}
-              className="p-1 rounded hover:bg-background-secondary transition-colors"
-              aria-label="Quote"
-              title="引用此消息"
-            >
-              <svg className="w-3.5 h-3.5 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </button>
+            {!isUser && (
+              <button
+                type="button"
+                onClick={handleQuote}
+                className="p-1 rounded hover:bg-background-secondary transition-colors"
+                aria-label="Quote"
+                title="引用此消息"
+              >
+                <svg className="w-3.5 h-3.5 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
+            )}
 
             {isUser && (
               <button

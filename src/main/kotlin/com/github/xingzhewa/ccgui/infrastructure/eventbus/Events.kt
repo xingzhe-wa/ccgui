@@ -200,6 +200,26 @@ data class ModalClosedEvent(
     override val type: String = "ui.modal.closed"
 }
 
+/**
+ * 设置面板打开事件
+ * 用于从工具栏按钮打开设置面板
+ */
+data class SettingsPanelRequestedEvent(
+    val tabId: String? = null  // 可选：指定要打开的标签页 ID
+) : Event("ui.settings.requested") {
+    override val type: String = "ui.settings.requested"
+}
+
+/**
+ * 会话已确认事件
+ * 当新会话完成第一次提问后触发，用于将会话加入历史记录
+ */
+data class SessionConfirmedEvent(
+    val sessionId: String
+) : Event("session.confirmed") {
+    override val type: String = "session.confirmed"
+}
+
 // ==================== Task Events ====================
 
 /**

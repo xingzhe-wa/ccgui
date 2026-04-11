@@ -22,6 +22,8 @@
 | PIT-006 | 参数解析 | 发送消息无响应 | handleSendMessage 少解析一层 JSON 嵌套 | 用户发送的消息无法到达后端处理 | resolved |
 | PIT-007 | ID 一致性 | 事件推送失败 | ToolWindow ID 在代码与 plugin.xml 中不一致 | getToolWindow() 返回 null | resolved |
 | PIT-008 | 命名规范 | 侧边栏显示错误名称 | 插件 ID 与显示名未分离管理 | 用户看到 "CCGUI" 而非 "CC Assistant" | resolved |
+| PIT-009 | 前后端通信 | TaskStatusBar 启动崩溃 | getTaskStatus 返回 null，前端未做空值处理即传入 setState | 插件启动后聊天界面立即崩溃 | resolved |
+| PIT-010 | Kotlin 类型 | mutableMapOf 投影类型冲突 |异构值类型的 MutableMap 使用 `mutableMapOf()` 推断为 `MutableMap<String, out Any?>`，禁止调用 set() | 编译错误，chatConfig 无法动态更新 | resolved |
 
 ---
 
@@ -38,6 +40,10 @@
 3. 增加 3 秒后备超时，防止 load handler 未触发的极端情况。
 
 **关键位置**：`CefBrowserPanel.kt` — `loadHtmlPage()` (line ~1145), `setupLoadListener()` (line ~131)
+
+**规避检查清单**：
+- [ ] 所有 JavaScript 注入代码是否放在 `onLoadEnd` 回调或 load listener 中？
+- [ ] 是否添加了后备超时（3 秒）防止 load handler 未触发？
 
 **状态**：resolved
 
@@ -57,6 +63,10 @@ base: './',
 ```
 
 **关键位置**：`webview/vite.config.ts` line 8
+
+**规避检查清单**：
+- [ ] `vite.config.ts` 的 `base` 是否为 `'./'`（相对路径）？
+- [ ] 生产构建后是否通过 `file://` 协议测试过页面加载？
 
 **状态**：resolved
 
@@ -85,6 +95,11 @@ javaEvents.forEach((eventName) => {
 
 **关键位置**：`CefBrowserPanel.kt` `injectBackendJavaScript()` (line ~1043), `webview/src/main/index.tsx` (line 15-30)
 
+**规避检查清单**：
+- [ ] Java → JS 事件是否通过 `window.dispatchEvent(CustomEvent)` 广播？
+- [ ] 前端 `index.tsx` 是否通过 `window.addEventListener` 监听并转发到 `eventBus`？
+- [ ] `javaEvents` 数组是否包含了所有需要桥接的事件名？
+
 **状态**：resolved
 
 ---
@@ -103,6 +118,10 @@ private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ```
 
 **关键位置**：`EventBus.kt` line 34, `CefBrowserPanel.kt` line 45, `MyProjectActivity.kt` line 25
+
+**规避检查清单**：
+- [ ] 所有 `CoroutineScope` 是否使用 `Dispatchers.Default`？
+- [ ] 是否有启动阶段使用 `Dispatchers.Main` 的代码（应使用 `withContext(Dispatchers.EDT)` 临时切换）？
 
 **状态**：resolved
 
@@ -127,6 +146,10 @@ sendToJavaScript("streaming:chunk",
 ```
 
 **关键位置**：`CefBrowserPanel.kt` `handleSendMessage()` (line ~292-307), `ChatView.tsx` (line ~99-109)
+
+**规避检查清单**：
+- [ ] 所有 streaming 事件（chunk/complete/error）是否携带 `messageId`？
+- [ ] `handleSendMessage` 解析后是否将 `messageId` 保存到上下文中供后续事件使用？
 
 **状态**：resolved
 
@@ -153,6 +176,10 @@ if (messageStr != null) {
 
 **关键位置**：`CefBrowserPanel.kt` `handleSendMessage()` (line ~292-313), `webview/src/lib/java-bridge.ts` (line 100-101)
 
+**规避检查清单**：
+- [ ] `handleSendMessage` 是否处理了 `message` 字段的 JSON 字符串嵌套解析？
+- [ ] 是否同时兼容直接字段格式（`sessionId`/`content`）作为 fallback？
+
 **状态**：resolved
 
 ---
@@ -171,6 +198,10 @@ val toolWindow = toolWindowManager.getToolWindow("CCGUI")
 ```
 
 **关键位置**：`MyProjectActivity.kt` line 87, `plugin.xml` line 15
+
+**规避检查清单**：
+- [ ] 所有 `getToolWindow()` 调用使用的 ID 是否与 `plugin.xml` 中注册的 ID 一致？
+- [ ] 新增 ToolWindow 时是否同时更新 `plugin.xml` 和代码中的 ID？
 
 **状态**：resolved
 
@@ -199,6 +230,146 @@ toolWindow.setTitle("CC Assistant")
 ```
 
 **关键位置**：`plugin.xml` line 4, `MyToolWindowFactory.kt` line 39
+
+**规避检查清单**：
+- [ ] `plugin.xml` 的 `<name>` 标签是否设置为 "CC Assistant"（非内部 ID）？
+- [ ] ToolWindowFactory 是否显式调用 `setTitle("CC Assistant")`？
+- [ ] 代码中是否有硬编码的产品名 "CCGUI" 需要替换？
+
+**状态**：resolved
+
+---
+
+## PIT-009: javaBridge.getTaskStatus() 返回 null 导致前端崩溃
+
+**现象**：`TaskStatusBar` 组件首次挂载时调用 `getTaskStatus()`，返回值为 `null`（Kotlin 后端 `handleGetTaskStatus` 在页面加载初期调用时 `taskProgressTracker.getActiveTasks()` 尚无可用数据）。前端直接将该 null 传入 `setData(result)`，触发 TypeScript 类型错误。
+
+**根因**：`getTaskStatus` 的 TypeScript 返回类型为 `Promise<TaskStatusData>`，但 Kotlin 端返回的实际是 `null`（`taskProgressTracker` 未初始化时返回空列表被序列化后仍为 `null`）。前端 `setData(result)` 在 strict mode 下报类型错误，且即使忽略类型错误也会导致 UI 状态异常。
+
+**解决方案**：
+
+1. 前端 `TaskStatusBar.tsx` 中使用空值合并运算符 `result ?? DEFAULT_DATA`，在结果为 null 时使用默认空状态。
+2. Kotlin 后端 `handleGetTaskStatus` 确保所有字段均有默认值，返回结构化空对象而非 null。
+
+```typescript
+// TaskStatusBar.tsx line 59-60
+const DEFAULT_DATA: TaskStatusData = { tasks: [], activeSubagents: [], diffRecords: [] };
+setData(result ?? DEFAULT_DATA);
+```
+
+**关键位置**：`webview/src/main/components/TaskStatusBar.tsx:58-60`, `CefBrowserPanel.kt:handleGetTaskStatus()`
+
+**规避检查清单**：
+- [ ] 所有 Java → JS 的 Promise 返回值是否处理 null 场景？
+- [ ] Kotlin handler 是否返回非空类型的结构化数据（不返回 null）？
+
+**状态**：resolved
+
+---
+
+## PIT-010: Kotlin mutableMapOf 异构值类型投影冲突
+
+**现象**：`CefBrowserPanel.kt` 中定义 `chatConfig` 为可变配置存储：
+
+```kotlin
+private val chatConfig = mutableMapOf(
+    "conversationMode" to ConversationMode.AUTO.name,
+    "currentAgentId" to null as String?,
+    "streamingEnabled" to true,
+    "thinkingEnabled" to false,
+    "thinkingBudgetTokens" to null as Int?
+)
+```
+
+编译时报错：`Receiver type 'MutableMap<String, out Any?>' contains out projection which prohibits use of 'set'`
+
+**根因**：`mutableMapOf(...)` 的返回类型被推断为 `MutableMap<String, out Any?>`（协变投影），`out Any?` 意味着该 Map 的 value 类型是"只读"的，调用 `set(key, value)` 会违反类型安全。Kotlin 不允许对协变位置（out position）的泛型调用 mutating 方法。
+
+**解决方案**：显式声明 `MutableMap<String, Any?>` 类型，消除投影歧义：
+
+```kotlin
+private val chatConfig: MutableMap<String, Any?> = mutableMapOf(
+    "conversationMode" to ConversationMode.AUTO.name,
+    "currentAgentId" to null as String?,
+    "streamingEnabled" to true,
+    "thinkingEnabled" to false,
+    "thinkingBudgetTokens" to null as Int?
+)
+```
+
+**关键位置**：`CefBrowserPanel.kt:636`（`chatConfig` 字段定义）
+
+**规避检查清单**：
+- [ ] Kotlin 中 `mutableMapOf` 异构值类型时是否显式声明 `MutableMap<K, V>`？
+- [ ] 若需要存储 null 值（如 `null as String?`），泛型参数 V 是否包含 `?`（可空）？
+
+**状态**：resolved
+
+---
+
+## PIT-011: 高级设置（temperature/topP/maxTokens/maxRetries）在 Claude Code daemon 模式下不生效
+
+**现象**：`ModelConfigPanel` 中的高级设置区块（temperature、topP、maxTokens、maxRetries）可配置，但 Claude Code CLI 的 `-p prompt` 模式不接受这些参数。
+
+**根因**：`SdkConfigBuilder.buildCommand()` 中仅构造了 `--model`、`--thinking-budget`、`--max-turns` 等少数参数，未构造 `temperature`、`top_p`、`max_tokens` 等参数。Claude Code daemon 模式（stdin/stdout NDJSON）下这些参数由 Claude Code CLI 自动管理，不接受用户自定义。
+
+**解决方案**：
+
+1. 从 `ModelConfigPanel.tsx` 中移除高级设置区块（temperature、topP、maxTokens、maxRetries 的 UI 和相关状态）。
+2. 从 Kotlin 后端 `ModelConfig` 中移除这些不再使用的字段（或保留但标注为废弃）。
+3. 在踩坑记录中标注：Claude Code daemon 模式下这些参数不受控制。
+
+**关键位置**：`webview/src/features/model/components/ModelConfigPanel.tsx`（已移除高级设置区块），`src/main/kotlin/.../adaptation/sdk/SdkConfigBuilder.kt`（buildCommand 方法）
+
+**规避检查清单**：
+- [ ] 在 Claude Code daemon 模式下，任何模型级别的参数（temperature、topP、maxTokens 等）是否需要确认 CLI 支持后才暴露给用户？
+- [ ] 新增模型参数配置时，是否确认了当前通信模式（HTTP API vs daemon CLI）的支持情况？
+
+**状态**：resolved
+
+---
+
+## PIT-012: Flex 布局重构遗漏 flex-col 导致主内容区消失
+
+**现象**：UI 重构中将 AppLayout 从"左侧边栏 + 主内容"改为"顶部栏 + 主内容"，移除 `aside` 后整个主内容区不可见，所有交互失效（无法发消息、无法跳转设置页）。
+
+**根因**：外层容器 `<div className="flex h-screen">` 默认 `flex-direction: row`，移除侧边栏后 header 和 main 仍然水平排列。header 占满宽度后 main 被挤出视口。缺少 `flex-col` 使子元素垂直堆叠。
+
+**解决方案**：
+
+1. 外层容器添加 `flex-col`：`<div className="flex flex-col h-screen w-screen">`
+2. header 固定 `h-12`，main 使用 `flex-1` 占据剩余高度
+
+**关键位置**：`webview/src/main/components/AppLayout.tsx:21`
+
+**规避检查清单**：
+- [ ] 修改 flex 布局（增删子元素）时，是否确认 `flex-direction` 与预期布局方向一致？
+- [ ] UI 重构后是否通过实际运行验证所有页面可见且可交互（不能仅依赖编译通过）？
+
+**状态**：resolved
+
+---
+
+## PIT-013: 后端 data class 字段移除后引用未全面清理
+
+**现象**：`ModelConfig` data class 注释掉了 `maxTokens`/`temperature`/`topP` 字段，但 `fromJson()`、`toJson()`、`CefBrowserPanel.handleGetModelConfig()`、`CefBrowserPanel.handleUpdateModelConfig()` 仍引用这些字段，导致 Kotlin 编译失败。
+
+**根因**：字段移除是增量操作（先注释 data class 属性），未同步执行全文搜索清理所有引用点。只改了声明处，未改使用处。
+
+**解决方案**：
+
+1. 移除 data class 字段后，必须全文搜索该字段名，逐个清理
+2. `fromJson()` 中移除对应解析行
+3. `toJson()` 中移除对应序列化行
+4. Bridge handler 中移除对应字段读写
+5. 前端 `java-bridge.ts` 同步更新类型定义
+
+**关键位置**：`model/config/ModelConfig.kt`（fromJson/toJson）、`browser/CefBrowserPanel.kt`（handleGetModelConfig/handleUpdateModelConfig）
+
+**规避检查清单**：
+- [ ] 移除 data class 字段后，是否执行了全文搜索确认无残留引用？
+- [ ] 前后端共享字段变更时，是否同时更新 Kotlin data class + TS type + Bridge handler 三处？
+- [ ] 字段移除后是否运行了 `compileKotlin` + `tsc --noEmit` 双端编译验证？
 
 **状态**：resolved
 

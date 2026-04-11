@@ -5,7 +5,7 @@
  */
 
 import { memo, useCallback } from 'react';
-import { Edit2, Trash2, Play, Square, RefreshCw, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Edit2, Trash2, Play, Square, RefreshCw, AlertCircle, CheckCircle2, XCircle, Power } from 'lucide-react';
 import type { McpServer } from '@/shared/types';
 import { McpServerStatus } from '@/shared/types';
 import { cn } from '@/shared/utils/cn';
@@ -32,6 +32,8 @@ export interface McpServerCardProps {
   onTest?: () => void;
   /** 配置回调 */
   onConfigure?: () => void;
+  /** 启用/禁用回调 */
+  onToggleEnabled?: (server: McpServer) => void;
   className?: string;
 }
 
@@ -79,6 +81,7 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
   onStop,
   onTest,
   onConfigure,
+  onToggleEnabled,
   className
 }: McpServerCardProps) {
   const status = statusConfig[connectionStatus] || statusConfig[McpServerStatus.DISCONNECTED];
@@ -131,6 +134,14 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
     [onConfigure]
   );
 
+  const handleToggleEnabled = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onToggleEnabled?.({ ...server, enabled: !server.enabled });
+    },
+    [server, onToggleEnabled]
+  );
+
   const isConnecting = connectionStatus === McpServerStatus.CONNECTING;
   const isConnected = connectionStatus === McpServerStatus.CONNECTED;
   const isError = connectionStatus === McpServerStatus.ERROR;
@@ -160,11 +171,21 @@ export const McpServerCard = memo<McpServerCardProps>(function McpServerCard({
             </span>
           </div>
         </div>
-        {!server.enabled && (
-          <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground">
-            已禁用
-          </span>
-        )}
+        {/* 启用/禁用开关 */}
+        <button
+          type="button"
+          onClick={handleToggleEnabled}
+          className={cn(
+            'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+            server.enabled
+              ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300'
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          )}
+          title={server.enabled ? '禁用服务器' : '启用服务器'}
+        >
+          <Power className={cn('w-3 h-3', server.enabled && 'text-green-600 dark:text-green-400')} />
+          {server.enabled ? '已启用' : '已禁用'}
+        </button>
       </div>
 
       {/* 描述 */}

@@ -9,6 +9,8 @@ import { AttachmentDropZone } from './AttachmentDropZone';
 import { ImagePreview } from './ImagePreview';
 import { SendButton } from './SendButton';
 import { InputToolbar } from './InputToolbar';
+import { SlashCommandPalette } from '@/main/components/SlashCommandPalette';
+import { ConfigSelect } from '@/main/components/ConfigSelect';
 import { useSessionStore } from '@/shared/stores/sessionStore';
 import { javaBridge } from '@/lib/java-bridge';
 import type { ContentPart, MessageReference } from '@/shared/types';
@@ -54,6 +56,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showSlashPalette, setShowSlashPalette] = useState(false);
   const [optimizationResult, setOptimizationResult] = useState<{
     improvements?: string[];
     confidence?: number;
@@ -70,6 +73,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
   }, [currentSessionId, disabled]);
 
   const handleSend = useCallback(async () => {
+    setShowSlashPalette(false);
     if (!text.trim() && attachments.length === 0) return;
 
     const contentParts: ContentPart[] = [];
@@ -110,9 +114,12 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const [isOptimizing, setIsOptimizing] = useState(false);
+
   const handleOptimize = useCallback(async () => {
-    if (!text.trim() || isStreaming) return;
+    if (!text.trim() || isStreaming || isOptimizing) return;
     try {
+      setIsOptimizing(true);
       const result = await javaBridge.optimizePrompt(text);
       if (result?.optimizedPrompt) {
         setText(result.optimizedPrompt);
@@ -125,8 +132,10 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       }
     } catch (error) {
       console.error('Failed to optimize prompt:', error);
+    } finally {
+      setIsOptimizing(false);
     }
-  }, [text, isStreaming]);
+  }, [text, isStreaming, isOptimizing]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -164,6 +173,7 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
           onAttach={() => setShowAttachMenu(!showAttachMenu)}
           onOptimize={handleOptimize}
           isStreaming={isStreaming}
+          isOptimizing={isOptimizing}
           disabled={disabled}
         />
       </div>
@@ -244,17 +254,50 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
       />
 
       {/* Text input area */}
-      <div className="flex items-end gap-2 px-4 pb-4">
-        <div className="flex-1 min-w-0">
+      <div className="relative flex items-end gap-2 px-4 pb-4">
+        <div
+          className="flex-1 min-w-0"
+          onPaste={(e) => {
+            const items = Array.from(e.clipboardData?.items ?? []);
+            const files: File[] = [];
+            for (const item of items) {
+              if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) files.push(file);
+              }
+            }
+            if (files.length > 0) {
+              e.preventDefault();
+              handleFilesSelected(files);
+            }
+          }}
+        >
           <AutoResizeTextarea
             ref={textareaRef}
             value={text}
-            onChange={setText}
+            onChange={(val) => {
+              setText(val);
+              setShowSlashPalette(val.startsWith('/'));
+            }}
             onSubmit={handleSend}
             placeholder={placeholder}
             disabled={disabled}
             maxRows={8}
           />
+          {/* Slash Command Palette */}
+          {showSlashPalette && (
+            <SlashCommandPalette
+              filter={text.slice(1)}
+              onSelect={(cmd) => {
+                setText('');
+                setShowSlashPalette(false);
+                javaBridge.executeSlashCommand(`/${cmd}`).catch((err) => {
+                  console.error('Failed to execute slash command:', err);
+                });
+              }}
+              onClose={() => setShowSlashPalette(false)}
+            />
+          )}
         </div>
 
         <SendButton
@@ -264,10 +307,13 @@ export const ChatInput = memo<ChatInputProps>(function ChatInput({
         />
       </div>
 
-      {/* Hint text */}
-      <div className="px-4 pb-3 text-xs text-foreground-muted">
-        Press <kbd className="px-1.5 py-0.5 rounded bg-background-elevated">Enter</kbd> to send,{' '}
-        <kbd className="px-1.5 py-0.5 rounded bg-background-elevated">Shift+Enter</kbd> for new line
+      {/* 运行时配置栏 */}
+      <div className="flex items-center gap-3 px-4 pb-3">
+        <ConfigSelect />
+        <div className="flex-1" />
+        <span className="text-xs text-muted-foreground">
+          <kbd className="px-1 py-0.5 rounded bg-background-elevated text-[10px]">Enter</kbd> 发送
+        </span>
       </div>
     </div>
   );

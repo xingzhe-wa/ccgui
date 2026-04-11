@@ -245,18 +245,6 @@ export const SkillEditor = memo<SkillEditorProps>(function SkillEditor({
                 placeholder="如: Cmd+Shift+S"
               />
             </div>
-
-            {/* 启用状态 */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="enabled"
-                checked={formData.enabled ?? true}
-                onChange={(e) => handleChange('enabled', e.target.checked)}
-                className="rounded"
-              />
-              <label htmlFor="enabled" className="text-sm">启用此 Skill</label>
-            </div>
           </div>
         </form>
 

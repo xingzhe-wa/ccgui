@@ -80,6 +80,104 @@ export interface JavaBackendAPI {
     maxRetries?: number;
   }): Promise<void>;
 
+  // ========== Provider Profiles ==========
+  /**
+   * 获取所有 Provider Profiles
+   */
+  getProviderProfiles(): Promise<{
+    profiles: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      source: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+      sonnetModel: string;
+      opusModel: string;
+      maxModel: string;
+      maxRetries: number;
+      createdAt: number;
+      updatedAt: number;
+    }>;
+    activeProfileId: string | null;
+  }>;
+
+  /**
+   * 创建 Provider Profile
+   */
+  createProviderProfile(profile: {
+    id: string;
+    name: string;
+    provider?: string;
+    source?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    sonnetModel?: string;
+    opusModel?: string;
+    maxModel?: string;
+    maxRetries?: number;
+    createdAt?: number;
+    updatedAt?: number;
+  }): Promise<{ success: boolean; id?: string }>;
+
+  /**
+   * 更新 Provider Profile
+   */
+  updateProviderProfile(profile: {
+    id: string;
+    name: string;
+    provider?: string;
+    source?: string;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    sonnetModel?: string;
+    opusModel?: string;
+    maxModel?: string;
+    maxRetries?: number;
+    createdAt?: number;
+    updatedAt?: number;
+  }): Promise<{ success: boolean }>;
+
+  /**
+   * 删除 Provider Profile
+   */
+  deleteProviderProfile(profileId: string): Promise<{ success: boolean }>;
+
+  /**
+   * 设置激活的 Provider Profile
+   */
+  setActiveProviderProfile(profileId: string | null): Promise<{ success: boolean }>;
+
+  /**
+   * 重新排序 Provider Profiles
+   */
+  reorderProviderProfiles(orderedIds: string[]): Promise<{ success: boolean }>;
+
+  /**
+   * 转换 cc-switch 配置为本地配置
+   */
+  convertCcSwitchProfile(profileId: string): Promise<{
+    success: boolean;
+    profile?: {
+      id: string;
+      name: string;
+      provider: string;
+      source: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+      sonnetModel: string;
+      opusModel: string;
+      maxModel: string;
+      maxRetries: number;
+      createdAt: number;
+      updatedAt: number;
+    };
+  }>;
+
   // ========== 主题相关 ==========
   /**
    * 获取所有主题
@@ -216,6 +314,58 @@ export interface JavaBackendAPI {
    * 提交问题答案
    */
   submitAnswer(questionId: string, answer: any): Promise<void>;
+
+  // ========== Chat Config ==========
+  /**
+   * 获取 Chat 配置（模式、Agent、Streaming、Thinking）
+   */
+  getChatConfig(): Promise<{
+    conversationMode: string;
+    currentAgentId: string | null;
+    streamingEnabled: boolean;
+  }>;
+
+  /**
+   * 更新 Chat 配置
+   */
+  updateChatConfig(config: {
+    conversationMode?: string;
+    currentAgentId?: string | null;
+    streamingEnabled?: boolean;
+  }): Promise<void>;
+
+  // ========== Task Status ==========
+  /**
+   * 获取任务状态
+   */
+  getTaskStatus(): Promise<{
+    tasks: Array<{
+      taskId: string;
+      name: string;
+      status: string;
+      currentStep: number;
+      totalSteps: number;
+      progress: number;
+    }>;
+    activeSubagents: Array<{
+      agentId: string;
+      agentName: string;
+      taskId: string;
+      startTime: number;
+      status: string;
+    }>;
+    diffRecords: Array<Record<string, never>>;
+  }>;
+
+  // ========== Slash Commands ==========
+  /**
+   * 执行 Slash 命令
+   */
+  executeSlashCommand(command: string): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }>;
 
   // ========== 底层通信 ==========
   /**

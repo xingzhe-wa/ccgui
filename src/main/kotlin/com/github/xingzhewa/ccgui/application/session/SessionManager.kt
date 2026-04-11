@@ -5,6 +5,7 @@ import com.github.xingzhewa.ccgui.infrastructure.eventbus.EventBus
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionCreatedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionDeletedEvent
 import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionSwitchedEvent
+import com.github.xingzhewa.ccgui.infrastructure.eventbus.SessionConfirmedEvent
 import com.github.xingzhewa.ccgui.infrastructure.storage.SearchFilters
 import com.github.xingzhewa.ccgui.infrastructure.storage.SessionStorage
 import com.github.xingzhewa.ccgui.model.message.ChatMessage
@@ -133,11 +134,41 @@ class SessionManager(private val project: Project) : Disposable {
 
     /**
      * 添加消息到会话
+     * 如果会话是待确认状态（isPending=true），添加消息后会标记为已确认并发布事件
      */
     fun addMessage(sessionId: String, message: ChatMessage) {
         val session = sessionStorage.getSession(sessionId) ?: return
-        sessionStorage.updateSession(session.withMessage(message))
+
+        // 如果会话是待确认状态，先标记为已确认
+        val updatedSession = if (session.isPending) {
+            session.withConfirmed().withMessage(message)
+        } else {
+            session.withMessage(message)
+        }
+
+        sessionStorage.updateSession(updatedSession)
         _sessions.value = sessionStorage.getAllSessions()
+
+        // 如果是待确认会话已确认，发布事件
+        if (session.isPending) {
+            EventBus.publish(SessionConfirmedEvent(sessionId))
+            log.info("Session confirmed after first message: $sessionId")
+        }
+    }
+
+    /**
+     * 手动确认会话（当用户首次发送消息时调用）
+     * 与 addMessage 不同，此方法仅标记会话为已确认，不添加消息
+     */
+    fun confirmSession(sessionId: String): Boolean {
+        val session = sessionStorage.getSession(sessionId) ?: return false
+        if (!session.isPending) return false
+
+        sessionStorage.updateSession(session.withConfirmed())
+        _sessions.value = sessionStorage.getAllSessions()
+        EventBus.publish(SessionConfirmedEvent(sessionId))
+        log.info("Session manually confirmed: $sessionId")
+        return true
     }
 
     /**
@@ -192,6 +223,21 @@ class SessionManager(private val project: Project) : Disposable {
      */
     fun getSessionsByType(type: SessionType): List<ChatSession> {
         return sessionStorage.getSessionsByType(type)
+    }
+
+    /**
+     * 获取历史会话列表（排除待确认会话）
+     * 待确认会话是指新建后还未进行第一次提问的会话
+     */
+    fun getHistorySessions(): List<ChatSession> {
+        return sessionStorage.getAllSessions().filter { !it.isPending }
+    }
+
+    /**
+     * 获取待确认会话（新建但未进行第一次提问的会话）
+     */
+    fun getPendingSessions(): List<ChatSession> {
+        return sessionStorage.getAllSessions().filter { it.isPending }
     }
 
     /**

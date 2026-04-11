@@ -89,6 +89,7 @@ describe('appStore', () => {
           updatedAt: Date.now(),
           isActive: true,
           status: SessionStatus.IDLE,
+          isInitialized: true,
         };
 
         const mockBackend = getMockCcBackend();
@@ -148,6 +149,7 @@ describe('appStore', () => {
             updatedAt: Date.now(),
             isActive: true,
             status: SessionStatus.IDLE,
+            isInitialized: true,
           },
           {
             id: 'session-2',
@@ -170,6 +172,7 @@ describe('appStore', () => {
             updatedAt: Date.now(),
             isActive: true,
             status: SessionStatus.IDLE,
+            isInitialized: true,
           },
         ];
 
@@ -206,6 +209,7 @@ describe('appStore', () => {
           updatedAt: Date.now(),
           isActive: true,
           status: SessionStatus.IDLE,
+          isInitialized: true,
         };
 
         useAppStore.setState({ sessions: [mockSession], currentSessionId: 'current-session' });
@@ -241,6 +245,7 @@ describe('appStore', () => {
           updatedAt: 1000,
           isActive: true,
           status: SessionStatus.IDLE,
+          isInitialized: true,
         };
 
         useAppStore.setState({ sessions: [mockSession] });
@@ -277,6 +282,7 @@ describe('appStore', () => {
           updatedAt: 1000,
           isActive: true,
           status: SessionStatus.IDLE,
+          isInitialized: true,
         };
 
         useAppStore.setState({ sessions: [mockSession] });
@@ -321,6 +327,7 @@ describe('appStore', () => {
             updatedAt: 1,
             isActive: true,
             status: SessionStatus.IDLE,
+            isInitialized: true,
           },
           {
             id: '2',
@@ -343,6 +350,7 @@ describe('appStore', () => {
             updatedAt: 2,
             isActive: true,
             status: SessionStatus.IDLE,
+            isInitialized: true,
           },
           {
             id: '3',
@@ -365,6 +373,7 @@ describe('appStore', () => {
             updatedAt: 3,
             isActive: true,
             status: SessionStatus.IDLE,
+            isInitialized: true,
           },
         ];
 
@@ -535,6 +544,7 @@ describe('appStore', () => {
           updatedAt: Date.now(),
           isActive: true,
           status: SessionStatus.IDLE,
+          isInitialized: true,
         },
       ];
 
@@ -592,6 +602,7 @@ describe('appStore', () => {
         updatedAt: 1,
         isActive: true,
         status: SessionStatus.IDLE,
+        isInitialized: true,
       };
       useAppStore.setState({ sessions: [mockSession] });
 

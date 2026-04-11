@@ -90,7 +90,6 @@ export const SkillCard = memo<SkillCardProps>(function SkillCard({
         'group relative rounded-lg border bg-background p-4 transition-all cursor-pointer',
         'hover:shadow-md hover:border-primary/50',
         isSelected && 'border-primary bg-primary/5',
-        !skill.enabled && 'opacity-60',
         className
       )}
     >
@@ -105,11 +104,6 @@ export const SkillCard = memo<SkillCardProps>(function SkillCard({
             </span>
           </div>
         </div>
-        {!skill.enabled && (
-          <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground">
-            已禁用
-          </span>
-        )}
       </div>
 
       {/* 描述 */}

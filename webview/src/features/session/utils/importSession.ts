@@ -79,7 +79,8 @@ export function parseSessionFromJson(jsonContent: string): ImportValidationResul
       createdAt: data.createdAt || Date.now(),
       updatedAt: data.updatedAt || Date.now(),
       isActive: false,
-      status: data.status || SessionStatus.IDLE
+      status: data.status || SessionStatus.IDLE,
+      isInitialized: true,
     };
 
     // 检查消息数量
@@ -172,7 +173,8 @@ export function parseSessionFromMarkdown(markdownContent: string, name: string):
     createdAt: Date.now(),
     updatedAt: Date.now(),
     isActive: false,
-    status: SessionStatus.IDLE
+    status: SessionStatus.IDLE,
+    isInitialized: true,
   };
 
   return { isValid: true, errors, warnings, session };
