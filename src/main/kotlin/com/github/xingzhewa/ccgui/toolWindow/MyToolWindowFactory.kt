@@ -37,6 +37,8 @@ class MyToolWindowFactory : ToolWindowFactory, Disposable {
 
             // 设置工具窗口标题为 CC Assistant
             toolWindow.setTitle("CC Assistant")
+            // 设置左侧悬浮图标悬停时显示的名称
+            toolWindow.setStripeTitle("CC Assistant")
 
             // 创建 CefBrowserPanel
             cefPanel = CefBrowserPanel(project)

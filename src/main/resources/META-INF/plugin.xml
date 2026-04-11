@@ -13,6 +13,7 @@
         <toolWindow
             factoryClass="com.github.xingzhewa.ccgui.toolWindow.MyToolWindowFactory"
             id="CCGUI"
+            text="CC Assistant"
             icon="META-INF/icons/ccgui_logo_13x13.png"/>
 
         <!-- Project Services -->
