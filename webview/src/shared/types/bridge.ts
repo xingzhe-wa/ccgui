@@ -370,8 +370,9 @@ export interface JavaBackendAPI {
   // ========== 底层通信 ==========
   /**
    * 底层请求-响应通信（由JavaBridge封装层内部使用，不直接在业务代码中调用）
+   * 简化 Bridge: send(action, params)
    */
-  send(request: { queryId: number; action: string; params?: any }): void;
+  send(action: string, params?: any): void;
 }
 
 /**

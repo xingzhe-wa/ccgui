@@ -85,9 +85,9 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // 生产环境移除console.log
+        drop_console: false, // 保留 console 用于 JCEF 环境调试
         drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn']
+        pure_funcs: ['console.log'] // 仅移除开发时的 console.log，保留 error/warn/info
       }
     },
     // Chunk 大小警告阈值 (KB)

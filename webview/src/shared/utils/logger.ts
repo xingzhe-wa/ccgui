@@ -36,14 +36,10 @@ export const logger = {
    */
   error: (...args: any[]) => {
     console.error('[cc-gui error]', ...args);
-    if (typeof window !== 'undefined' && window.ccBackend?.send) {
+    if (typeof window !== 'undefined' && window.ccBackend) {
       try {
-        // 使用底层 send 方法发送错误日志
-        window.ccBackend.send({
-          queryId: 0,
-          action: 'logError',
-          params: { message: args.map(String).join(' ') }
-        });
+        // 使用简化 Bridge API 发送错误日志
+        (window.ccBackend as any).send?.('logError', { message: args.map(String).join(' ') });
       } catch {
         // 忽略日志发送失败
       }

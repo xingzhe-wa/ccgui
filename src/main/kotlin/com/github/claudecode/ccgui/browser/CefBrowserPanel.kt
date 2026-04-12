@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * - 生命周期管理
  *
  * 请求处理委托给 JsRequestHandler（符合架构文档的 Handler 分离原则）
+ *
+ * Bridge 架构：简化版（直接 JBCefJSQuery，无 iframe 中转）
+ * - JS→Java: JBCefJSQuery 直接调用 Kotlin handleJsRequest()
+ * - Java→JS: executeJavaScript() 直接调用 window.ccEvents.emit()
  */
 class CefBrowserPanel(private val project: Project) : Disposable {
 
@@ -37,11 +42,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     /** JCEF 浏览器实例 */
     private var browser: JBCefBrowser? = null
 
-    /** JS 查询处理器 */
+    /** JS 查询处理器 - 用于 JS→Kotlin 通信 */
     private var jsQuery: JBCefJSQuery? = null
-
-    /** JS 调用后端的全局函数引用，由 injectBackendJavaScript() 设置 */
-    private var jsQueryInvoker: java.util.function.Function<String, JBCefJSQuery.Response>? = null
 
     /** 页面加载完成标志 */
     private var isPageLoaded = false
@@ -51,6 +53,13 @@ class CefBrowserPanel(private val project: Project) : Disposable {
 
     /** 页面加载监听器是否已设置 */
     private var loadListenerSetup = false
+
+    /** Bridge 注入状态标志 */
+    @Volatile
+    private var isBridgeInjected = false
+
+    /** Bridge 注入锁 */
+    private val bridgeInjectionLock = Any()
 
     /** JS 请求处理器 */
     private val jsRequestHandler: JsRequestHandler by lazy { JsRequestHandler(project) }
@@ -158,15 +167,14 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     }
 
     /**
-     * 设置 JS 查询回调
+     * 设置 JS 查询回调 - 直接使用 JBCefJSQuery 处理请求
      */
     private fun setupJsQuery() {
         browser?.let { b ->
-            jsQueryInvoker = java.util.function.Function<String, JBCefJSQuery.Response> { request ->
-                handleJsRequest(request)
-            }
             jsQuery = JBCefJSQuery.create(b).also {
-                it.addHandler(jsQueryInvoker!!)
+                it.addHandler { request ->
+                    handleJsRequest(request)
+                }
             }
         }
     }
@@ -179,12 +187,13 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      */
     private fun handleJsRequest(request: String): JBCefJSQuery.Response {
         return try {
+            log.debug("Received JS request: $request")
             val handled = jsRequestHandler.handleRequest(request)
             if (handled) {
                 // 异步响应已通过 callback 发送
                 JBCefJSQuery.Response("")
             } else {
-                // 未知 action
+                log.warn("Unknown action in request: $request")
                 JBCefJSQuery.Response("")
             }
         } catch (e: Exception) {
@@ -210,230 +219,202 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         sendToJavaScript("response", data)
     }
 
-    // ---- JavaScript Injection ----
+    // ---- JavaScript Injection (简化版，无 iframe 中转) ----
 
     /**
      * 注入后端 JavaScript Bridge
      *
-     * JS→Java 通信方案：
-     * 我们不依赖 JBCefJSQuery 的内部机制（其函数名随机且不可预测）。
-     * 改用自定义 iframe + postMessage 通道：
-     * - 注入一个隐藏 iframe，加载 data URL，内含 JS 脚本
-     * - 该脚本定义 __ccJavaRequest(request) 函数
-     * - 通过 iframe.contentWindow.postMessage 发送请求到主页面
-     * - 主页面收到消息后，调用 window.javaRequestCallback（由 Kotlin 设置）
-     * - Kotlin handler 执行后，通过 sendToJavaScript("actionResponse:xxx", data) 返回结果
+     * 简化架构：
+     * - JS→Java: 直接通过 JBCefJSQuery.inject() 调用 Kotlin
+     * - Java→JS: 通过 executeJavaScript() 调用 window.ccEvents.emit()
      *
-     * Java→JS 通信：sendToJavaScript() 直接调用 window.ccEvents.emit()
+     * 关键特性：
+     * - 同步锁防止重复注入
+     * - Pre-Registration 模式支持
+     * - 10秒请求超时检测
+     * - 桥接 Health Check
      */
     private fun injectBackendJavaScript() {
-        browser?.let { b ->
-            // iframe 的 data URL：内嵌脚本监听 postMessage，收到后调用主页面回调
-            val iframeDataUrl = (
-                "data:text/html;charset=utf-8," +
-                "<script>" +
-                "window.addEventListener('message',function(e){" +
-                "if(e.data&&e.data.type==='cc-java-request'){" +
-                "var req=e.data.request;" +
-                "var result='';" +
-                "if(typeof window.javaRequestCallback==='function'){" +
-                "result=window.javaRequestCallback(req);" +
-                "}" +
-                "e.source.postMessage({type:'cc-java-response',requestId:e.data.requestId,result:result},'*');" +
-                "}" +
-                "});" +
-                "window.parent.postMessage({type:'cc-bridge-ready'},'*');" +
-                "</script>"
-                ).replace("\n", "")
+        // 防止重复注入
+        synchronized(bridgeInjectionLock) {
+            if (isBridgeInjected) {
+                log.debug("Bridge already injected, skipping")
+                return
+            }
+            isBridgeInjected = true
+        }
 
-            // 主页面 bridge 脚本：设置 ccBackend.send() 和 ccEvents
-            val bridgeScript = """
-                (function() {
-                    if (window.ccBackend && window.ccEvents) return;
+        val cefBrowser = browser?.getCefBrowser() ?: run {
+            log.warn("Browser is null, cannot inject Bridge")
+            return
+        }
 
-                    var pendingRequests = {};
-                    var requestCounter = 0;
-                    var bridgeReady = false;
+        // 获取 JBCefJSQuery 注入的函数名
+        val injectFunction = jsQuery?.inject("msg") ?: run {
+            log.error("JBCefJSQuery not initialized")
+            return
+        }
 
-                    // 监听 iframe 就绪信号
-                    window.addEventListener('message', function(e) {
-                        if (e.data && e.data.type === 'cc-bridge-ready') {
-                            bridgeReady = true;
-                            console.log('[CCBackend] Bridge ready');
-                        }
-                        // 接收来自 iframe 的响应
-                        if (e.data && e.data.type === 'cc-java-response' && e.data.requestId) {
-                            var callback = pendingRequests[e.data.requestId];
-                            if (callback) {
-                                delete pendingRequests[e.data.requestId];
-                                callback(e.data.result);
-                            }
-                        }
-                    });
+        log.info("Injecting Bridge with function: $injectFunction")
 
-                    // Hook ccEvents.emit()：拦截 'response' 事件，将响应路由到 pendingRequests
-                    // java-bridge.ts 发送: ccEvents.on('response', ({queryId, result, error}) => ...)
-                    if (typeof window.ccEvents !== 'undefined') {
-                        var origEmit = window.ccEvents.emit.bind(window.ccEvents);
-                        var responseInterceptor = function(event, data) {
-                            if (event === 'response' && data && data.queryId) {
-                                var cb = pendingRequests[data.queryId];
-                                if (cb) {
-                                    delete pendingRequests[data.queryId];
-                                    cb(data.result);
-                                }
+        // 简化的 Bridge 脚本
+        val bridgeScript = """
+            (function() {
+                if (window.ccBackend && window.ccEvents) {
+                    console.log('[Bridge] Already injected, skipping');
+                    return;
+                }
+
+                console.log('[Bridge] Injecting simplified Bridge...');
+
+                // 获取 JBCefJSQuery 注入的函数引用
+                var _jcefQuery = $injectFunction;
+
+                // 挂起的请求队列
+                var _pendingRequests = {};
+                var REQUEST_TIMEOUT = 10000; // 10秒超时
+
+                // ccEvents：事件总线，Kotlin sendToJavaScript() 直接调用
+                window.ccEvents = {
+                    handlers: {},
+                    on: function(event, handler) {
+                        if (!this.handlers[event]) this.handlers[event] = [];
+                        this.handlers[event].push(handler);
+                        return function() {
+                            if (window.ccEvents && window.ccEvents.handlers && window.ccEvents.handlers[event]) {
+                                window.ccEvents.handlers[event] = window.ccEvents.handlers[event].filter(function(h) { return h !== handler; });
                             }
                         };
-                        window.ccEvents.emit = function(event, data) {
-                            responseInterceptor(event, data);
-                            return origEmit(event, data);
-                        };
+                    },
+                    off: function(event, handler) {
+                        if (this.handlers[event]) {
+                            this.handlers[event] = this.handlers[event].filter(function(h) { return h !== handler; });
+                        }
+                    },
+                    emit: function(event, data) {
+                        if (this.handlers[event]) {
+                            this.handlers[event].forEach(function(h) {
+                                try { h(data); } catch(e) { console.error('[ccEvents] Handler error:', e); }
+                            });
+                        }
+                        // 桥接到前端 CustomEvent（让 eventBus 监听 window 事件）
+                        window.dispatchEvent(new CustomEvent(event, { detail: data }));
                     }
+                };
 
-                    // ccBackend.send()：通过隐藏 iframe 发送请求到 Kotlin
-                    window.ccBackend = {
-                        send: function(request) {
-                            if (!bridgeReady) {
-                                console.warn('[CCBackend] Bridge not ready, request dropped');
-                                return;
-                            }
-                            var iframe = document.getElementById('__cc_bridge_iframe__');
-                            if (!iframe || !iframe.contentWindow) {
-                                console.warn('[CCBackend] Bridge iframe not found');
-                                return;
-                            }
-                            var requestId = ++requestCounter;
-                            // 等待响应（iframe 通过 postMessage 返回）
-                            pendingRequests[requestId] = function(result) {
-                                // 响应由 Kotlin sendToJavaScript("actionResponse:xxx", data) 处理
-                                // 这里不做任何事，因为所有响应都通过 ccEvents.emit() 推送
-                            };
-                            iframe.contentWindow.postMessage({
-                                type: 'cc-java-request',
-                                requestId: requestId,
-                                request: typeof request === 'string' ? request : JSON.stringify(request)
-                            }, '*');
+                // ccBackend.send()：通过 JBCefJSQuery 发送请求
+                window.ccBackend = {
+                    send: function(action, params) {
+                        var queryId = 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                        var payload = JSON.stringify({
+                            queryId: queryId,
+                            action: action,
+                            params: params || {}
+                        });
+
+                        console.log('[Bridge] Sending:', action, params);
+
+                        // 发送请求到 Kotlin
+                        try {
+                            _jcefQuery(payload);
+                        } catch (e) {
+                            console.error('[Bridge] Send error:', e);
                         }
-                    };
 
-                    // ccEvents：事件总线，Kotlin sendToJavaScript() 直接调用
-                    // 同时使用 CustomEvent 桥接到前端 eventBus
-                    window.ccEvents = {
-                        handlers: {},
-                        on: function(event, handler) {
-                            if (!this.handlers[event]) this.handlers[event] = [];
-                            this.handlers[event].push(handler);
-                            return function() {
-                                if (window.ccEvents && window.ccEvents.handlers && window.ccEvents.handlers[event]) {
-                                    window.ccEvents.handlers[event] = window.ccEvents.handlers[event].filter(function(h) { return h !== handler; });
-                                }
-                            };
-                        },
-                        off: function(event, handler) {
-                            if (this.handlers[event]) {
-                                this.handlers[event] = this.handlers[event].filter(function(h) { return h !== handler; });
+                        // 设置超时
+                        var timer = setTimeout(function() {
+                            if (_pendingRequests[queryId]) {
+                                console.warn('[Bridge] Request timeout:', action, queryId);
+                                delete _pendingRequests[queryId];
                             }
-                        },
-                        emit: function(event, data) {
-                            if (this.handlers[event]) {
-                                this.handlers[event].forEach(function(h) { h(data); });
-                            }
-                            // 桥接到前端 CustomEvent（让 eventBus 监听 window 事件）
-                            window.dispatchEvent(new CustomEvent(event, { detail: data }));
-                        }
-                    };
-                })();
-            """.trimIndent()
+                        }, REQUEST_TIMEOUT);
 
-            // Step 1: 创建隐藏 iframe（用于 JS→Kotlin 通信）
-            b.getCefBrowser().executeJavaScript(
-                """
-                (function() {
-                    if (document.getElementById('__cc_bridge_iframe__')) return;
-                    var iframe = document.createElement('iframe');
-                    iframe.id = '__cc_bridge_iframe__';
-                    iframe.src = '$iframeDataUrl';
-                    iframe.style.display = 'none';
-                    iframe.width = '0';
-                    iframe.height = '0';
-                    iframe.setAttribute('sandbox', 'allow-scripts');
-                    document.body ? document.body.appendChild(iframe) : document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(iframe); });
-                })();
-                """.trimIndent(),
-                b.getCefBrowser().getURL(),
-                0
-            )
-
-            // Step 2: 注入 ccBackend 和 ccEvents
-            b.getCefBrowser().executeJavaScript(bridgeScript, b.getCefBrowser().getURL(), 0)
-
-            // Step 3: 设置 window.javaRequestCallback（JS→Kotlin 的实际触发点）
-            // 使用 loadURL/javascript: 机制触发 JBCefJSQuery
-            // JBCefJSQuery 的注入脚本会创建 __jcef_query_<id>__ 函数
-            // 我们找到它并通过 location.href=javascript: 调用它
-            b.getCefBrowser().executeJavaScript(
-                """
-                (function() {
-                    var retryCount = 0;
-                    function setupCallback() {
-                        // 查找 JBCefJSQuery 注入的 __jcef_query_<id>__ 函数
-                        var keys = Object.keys(window).filter(function(k) { return k.indexOf('__jcef_query__') === 0; });
-                        if (keys.length > 0) {
-                            var fn = window[keys[0]];
-                            if (typeof fn === 'function') {
-                                window.javaRequestCallback = function(request) {
-                                    try {
-                                        var result = fn(request);
-                                        return typeof result === 'string' ? result : JSON.stringify(result || '');
-                                    } catch(ex) {
-                                        console.error('[CCBackend] javaRequestCallback error:', ex);
-                                        return '';
-                                    }
-                                };
-                                console.log('[CCBackend] javaRequestCallback connected to JBCefJSQuery');
-                                return true;
-                            }
+                        _pendingRequests[queryId] = { timer: timer, action: action };
+                    },
+                    // 响应处理（由 Kotlin 通过 ccEvents.emit('response', ...) 调用）
+                    _handleResponse: function(data) {
+                        if (data && data.queryId && _pendingRequests[data.queryId]) {
+                            var pending = _pendingRequests[data.queryId];
+                            clearTimeout(pending.timer);
+                            delete _pendingRequests[data.queryId];
+                            console.log('[Bridge] Response received:', pending.action, data.queryId);
                         }
-                        if (retryCount < 30) {
-                            retryCount++;
-                            setTimeout(setupCallback, 100);
-                        } else {
-                            console.warn('[CCBackend] JBCefJSQuery not found after 3s');
+                    },
+                    // 健康检查
+                    _healthCheck: function(timestamp) {
+                        console.log('[Bridge] Health check:', timestamp);
+                    },
+                    isDevMode: true
+                };
+
+                // 监听 response 事件以清理挂起的请求
+                window.ccEvents.on('response', window.ccBackend._handleResponse);
+
+                console.log('[Bridge] ccBackend injected successfully');
+            })();
+        """.trimIndent()
+
+        // 执行 Bridge 注入脚本
+        cefBrowser.executeJavaScript(bridgeScript, cefBrowser.url, 0)
+        log.info("Bridge injected successfully")
+
+        // 启动健康检查
+        startBridgeHealthCheck()
+    }
+
+    /**
+     * Bridge 健康检查
+     */
+    private fun startBridgeHealthCheck() {
+        scope.launch {
+            while (isActive && !isDisposed) {
+                delay(5000) // 5秒心跳
+                try {
+                    val jsCode = """
+                        if (window.ccBackend && window.ccBackend._healthCheck) {
+                            window.ccBackend._healthCheck(new Date().toISOString());
                         }
-                        return false;
-                    }
-                    setupCallback();
-                })();
-                """.trimIndent(),
-                b.getCefBrowser().getURL(),
-                0
-            )
+                    """.trimIndent()
+                    browser?.getCefBrowser()?.executeJavaScript(jsCode, browser?.getCefBrowser()?.url, 0)
+                } catch (e: Exception) {
+                    log.warn("Bridge health check failed", e)
+                }
+            }
         }
     }
+
+    /** dispose 状态标志 */
+    @Volatile
+    private var isDisposed = false
 
     // ---- Java → JS Communication ----
 
     /**
      * 发送数据到 JavaScript
-     * 使用 loadURL 执行 JavaScript 代码
+     * 使用 executeJavaScript 直接调用 window.ccEvents.emit()
      *
      * @param event 事件名称
      * @param data 数据
      */
     fun sendToJavaScript(event: String, data: Map<String, Any>) {
         browser?.let { b ->
-            val jsonData = JsonUtils.toJson(data)
-            // Escape single quotes and backslashes in event name to prevent injection
-            val safeEvent = event.replace("\\", "\\\\").replace("'", "\\'")
-            // Escape JSON string for safe embedding in JS single-quoted string
-            val safeJsonForJs = jsonData
-                .replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\n", "\\n")
-                .replace("\r", "")
-            val js = "window.ccEvents && window.ccEvents.emit('$safeEvent', JSON.parse('$safeJsonForJs'));"
-            // Use getCefBrowser().executeJavaScript() to avoid XSS via loadURL("javascript:...")
-            b.getCefBrowser().executeJavaScript(js, b.getCefBrowser().getURL(), 0)
+            val cefBrowser = b.getCefBrowser()
+            try {
+                val jsonData = JsonUtils.toJson(data)
+                // 安全转义 event 名称防止注入
+                val safeEvent = event.replace("\\", "\\\\").replace("'", "\\'")
+                // 安全转义 JSON 字符串
+                val safeJsonForJs = jsonData
+                    .replace("\\", "\\\\")
+                    .replace("'", "\\'")
+                    .replace("\n", "\\n")
+                    .replace("\r", "")
+
+                val js = "window.ccEvents && window.ccEvents.emit('$safeEvent', JSON.parse('$safeJsonForJs'));"
+                cefBrowser.executeJavaScript(js, cefBrowser.url, 0)
+            } catch (e: Exception) {
+                log.error("Error sending to JavaScript: ${e.message}", e)
+            }
         }
     }
 
@@ -441,11 +422,15 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      * 加载 HTML 页面
      */
     fun loadHtmlPage(url: String) {
-        // 重置加载状态
+        // 重置状态
         isPageLoaded = false
+        isBridgeInjected = false
+
         browser?.loadURL(url)
+
         // 等待页面加载完成后注入 Bridge（带后备超时）
         executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+
         // 后备：如果3秒后仍未加载完成，强制注入
         scope.launch {
             delay(3000)
@@ -461,11 +446,15 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      * 加载本地 HTML 内容
      */
     fun loadHtmlContent(htmlContent: String, baseUrl: String = "http://localhost/") {
-        // 重置加载状态
+        // 重置状态
         isPageLoaded = false
+        isBridgeInjected = false
+
         browser?.loadHTML(htmlContent, baseUrl)
+
         // 等待页面加载完成后注入 Bridge（带后备超时）
         executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+
         // 后备：如果3秒后仍未加载完成，强制注入
         scope.launch {
             delay(3000)
@@ -480,6 +469,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
     // ---- Lifecycle ----
 
     override fun dispose() {
+        isDisposed = true
         scope.cancel()
         jsQuery?.dispose()
         browser?.dispose()

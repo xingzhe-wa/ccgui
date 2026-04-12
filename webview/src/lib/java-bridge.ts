@@ -2,11 +2,10 @@
  * JavaBridge - Java ↔ JavaScript 通信封装
  *
  * 封装 JBCefJSQuery 的底层调用，提供类型安全的异步接口
+ * 简化 Bridge: 使用 ccBackend.send(action, params) 格式
  */
 
-import type { JavaBackendAPI } from '@/shared/types';
-
-// JavaBridge 类实现 JavaBackendAPI 接口
+// JavaBridge 类实现后端 API 接口
 // 注意：send 方法由 window.ccBackend 提供，这里通过类型断言使用
 class JavaBridge {
   // 实现 JavaBackendAPI 接口所需的方法（实际调用 window.ccBackend）
@@ -44,12 +43,13 @@ class JavaBridge {
       });
 
       // 调用Java（通过JBCefJSQuery注入的send方法）
+      // 简化 Bridge 使用 send(action, params) 格式
       try {
-        (window.ccBackend as JavaBackendAPI).send({
-          queryId,
-          action,
-          params
-        });
+        if (window.ccBackend && window.ccBackend.send) {
+          window.ccBackend.send(action, params);
+        } else {
+          throw new Error('Bridge not ready');
+        }
       } catch (error) {
         clearTimeout(timeout);
         this.pendingRequests.delete(queryId);
@@ -128,12 +128,13 @@ class JavaBridge {
       });
 
       // 调用Java（通过JBCefJSQuery注入的send方法）
+      // 简化 Bridge 使用 send(action, params) 格式
       try {
-        (window.ccBackend as JavaBackendAPI).send({
-          queryId,
-          action: 'streamMessage',
-          params: { message }
-        });
+        if (window.ccBackend && window.ccBackend.send) {
+          window.ccBackend.send('streamMessage', { message });
+        } else {
+          throw new Error('Bridge not ready');
+        }
       } catch (error) {
         clearTimeout(timeout);
         this.pendingRequests.delete(queryId);
@@ -143,8 +144,9 @@ class JavaBridge {
   }
 
   cancelStreaming(sessionId: string): void {
-    const queryId = ++this.queryId;
-    (window.ccBackend as JavaBackendAPI).send({ queryId, action: 'cancelStreaming', params: { sessionId } });
+    if (window.ccBackend && window.ccBackend.send) {
+      window.ccBackend.send('cancelStreaming', { sessionId });
+    }
   }
 
   async getConfig(key: string): Promise<any> {
