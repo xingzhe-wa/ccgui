@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    viteSingleFile(), // 将所有资源内联到单个 HTML 文件
+  ],
   // 重要：使用相对路径，使 file:// URL 加载时能正确解析资源
   base: './',
   resolve: {
@@ -22,76 +26,28 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    rollupOptions: {
-      output: {
-        manualChunks: (id) => {
-          // React 相关
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-            return 'vendor-react';
-          }
-          // React Router
-          if (id.includes('node_modules/react-router')) {
-            return 'vendor-router';
-          }
-          // Zustand 状态管理
-          if (id.includes('node_modules/zustand')) {
-            return 'vendor-state';
-          }
-          // Markdown 相关
-          if (id.includes('node_modules/react-markdown') ||
-              id.includes('node_modules/remark') ||
-              id.includes('node_modules/rehype') ||
-              id.includes('node_modules/katex')) {
-            return 'vendor-markdown';
-          }
-          // 代码高亮
-          if (id.includes('node_modules/highlight.js')) {
-            return 'vendor-highlight';
-          }
-          // 虚拟滚动
-          if (id.includes('node_modules/@tanstack/react-virtual')) {
-            return 'vendor-virtual';
-          }
-          // DnD Kit
-          if (id.includes('node_modules/@dnd-kit')) {
-            return 'vendor-dnd';
-          }
-          // Lucide 图标
-          if (id.includes('node_modules/lucide-react')) {
-            return 'vendor-icons';
-          }
-          // 其他 vendor (排除已处理的)
-          if (id.includes('node_modules') &&
-              !id.includes('node_modules/react') &&
-              !id.includes('node_modules/react-dom') &&
-              !id.includes('node_modules/react-router') &&
-              !id.includes('node_modules/zustand') &&
-              !id.includes('node_modules/react-markdown') &&
-              !id.includes('node_modules/remark') &&
-              !id.includes('node_modules/rehype') &&
-              !id.includes('node_modules/katex') &&
-              !id.includes('node_modules/highlight.js') &&
-              !id.includes('node_modules/@tanstack/react-virtual') &&
-              !id.includes('node_modules/@dnd-kit') &&
-              !id.includes('node_modules/lucide-react')) {
-            return 'vendor';
-          }
-          // 应用代码
-          return undefined;
-        }
-      }
-    },
-    // 启用压缩
     minify: 'terser',
     terserOptions: {
       compress: {
         drop_console: false, // 保留 console 用于 JCEF 环境调试
         drop_debugger: true,
         pure_funcs: ['console.log'] // 仅移除开发时的 console.log，保留 error/warn/info
-      }
+      },
+    },
+    // 内联所有资源到 HTML
+    assetsInlineLimit: 1024 * 1024, // 1MB 以下的资源全部内联
+    cssCodeSplit: false, // 不分割 CSS
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        // 使用 IIFE 格式，兼容 JCEF（不支持 ES 模块）
+        format: 'iife',
+        // 禁用代码分割，生成单个文件
+        manualChunks: undefined,
+      },
     },
     // Chunk 大小警告阈值 (KB)
-    chunkSizeWarningLimit: 500
+    chunkSizeWarningLimit: 1000
   },
   // 优化依赖预构建
   optimizeDeps: {

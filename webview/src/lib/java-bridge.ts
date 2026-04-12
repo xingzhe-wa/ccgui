@@ -8,9 +8,8 @@
 // JavaBridge 类实现后端 API 接口
 // 注意：send 方法由 window.ccBackend 提供，这里通过类型断言使用
 class JavaBridge {
-  // 实现 JavaBackendAPI 接口所需的方法（实际调用 window.ccBackend）
-  private queryId = 0;
-  private pendingRequests = new Map<number, {
+  // 使用字符串类型的 queryId，与后端保持一致
+  private pendingRequests = new Map<string, {
     resolve: (value: any) => void;
     reject: (error: Error) => void;
   }>();
@@ -25,6 +24,13 @@ class JavaBridge {
   }
 
   /**
+   * 生成唯一的 queryId（字符串格式）
+   */
+  private generateQueryId(): string {
+    return `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
    * 通用调用方法
    * 通过 JBCefJSQuery 向 Java 发送请求
    */
@@ -35,7 +41,7 @@ class JavaBridge {
       throw new Error(`Bridge not ready for action: ${action}. Call init() first and wait for isReady to be true.`);
     }
 
-    const queryId = ++this.queryId;
+    const queryId = this.generateQueryId();
 
     return new Promise<T>((resolve, reject) => {
       // 设置超时（30秒）
@@ -57,10 +63,11 @@ class JavaBridge {
       });
 
       // 调用Java（通过JBCefJSQuery注入的send方法）
-      // 简化 Bridge 使用 send(action, params) 格式
+      // 传递 queryId 到 params 中，让后端使用前端生成的 queryId
       try {
         if (window.ccBackend && window.ccBackend.send) {
-          window.ccBackend.send(action, params);
+          const paramsWithQueryId = { ...params, _queryId: queryId };
+          window.ccBackend.send(action, paramsWithQueryId);
         } else {
           throw new Error('Bridge send method not available');
         }
@@ -160,7 +167,7 @@ class JavaBridge {
   }
 
   streamMessage(message: string): Promise<any> {
-    const queryId = ++this.queryId;
+    const queryId = this.generateQueryId();
 
     return new Promise<any>((resolve, reject) => {
       // 设置超时（30秒）
@@ -185,7 +192,8 @@ class JavaBridge {
       // 简化 Bridge 使用 send(action, params) 格式
       try {
         if (window.ccBackend && window.ccBackend.send) {
-          window.ccBackend.send('streamMessage', { message });
+          const paramsWithQueryId = { message, _queryId: queryId };
+          window.ccBackend.send('streamMessage', paramsWithQueryId);
         } else {
           throw new Error('Bridge not ready');
         }

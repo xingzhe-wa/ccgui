@@ -1,9 +1,9 @@
+/* highlight.js 语法高亮主题 */
+@import 'highlight.js/styles/github-dark.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* highlight.js 语法高亮主题 */
-@import 'highlight.js/styles/github-dark.css';
 
 @layer base {
   :root {

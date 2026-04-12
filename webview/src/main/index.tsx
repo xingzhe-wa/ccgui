@@ -7,9 +7,9 @@ import { eventBus, Events } from '@/shared/utils/event-bus';
 
 // Dev 模式注入 mock bridge（生产构建由 dead-code elimination 移除）
 if (import.meta.env.DEV) {
-  // 使用 require 风格确保同步执行（Vite 会处理）
-  const { injectMockBridge } = await import('@/dev/mock-bridge');
-  injectMockBridge();
+  import('@/dev/mock-bridge').then(({ injectMockBridge }) => {
+    injectMockBridge();
+  });
 }
 
 // 桥接 Java 事件到前端 eventBus

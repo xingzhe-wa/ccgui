@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 /**
  * 回调类型：发送响应到 JS
  */
-typealias ResponseCallback = (action: String, queryId: Int, response: Any?, error: String?) -> Unit
+typealias ResponseCallback = (action: String, queryId: String, response: Any?, error: String?) -> Unit
 
 /**
  * 回调类型：发送事件到 JS
@@ -86,7 +86,7 @@ class JsRequestHandler(private val project: Project) {
     fun handleRequest(request: String): Boolean {
         return try {
             val json = JsonUtils.parseObject(request) ?: return false
-            val queryId = json.get("queryId")?.asInt ?: 0
+            val queryId = json.get("queryId")?.asString ?: ""
             val action = json.get("action")?.asString ?: ""
             val params = json.get("params")
 
@@ -162,7 +162,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Messaging Handlers ====================
 
-    private fun handleSendMessage(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSendMessage(queryId: String, params: JsonElement?): Boolean {
         var sessionId = ""
         var content = ""
         var messageId = ""
@@ -214,7 +214,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleStreamMessage(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleStreamMessage(queryId: String, params: JsonElement?): Boolean {
         var sessionId = ""
         var content = ""
         var messageId = ""
@@ -266,14 +266,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleCancelStreaming(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleCancelStreaming(queryId: String, params: JsonElement?): Boolean {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: ""
         chatOrchestrator.cancelCurrentMessage()
         responseCallback?.invoke("cancelStreaming", queryId, mapOf("success" to true), null)
         return true
     }
 
-    private fun handleSendMultimodalMessage(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSendMultimodalMessage(queryId: String, params: JsonElement?): Boolean {
         val jsonParams = params?.asJsonObject ?: return false
         val messageObj = jsonParams.get("message")?.asJsonObject ?: return false
         val sessionId = messageObj.get("sessionId")?.asString ?: ""
@@ -338,7 +338,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Config Handlers ====================
 
-    private fun handleGetConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleGetConfig(queryId: String, params: JsonElement?): Boolean {
         val config = configManager.getAppConfig()
         responseCallback?.invoke("getConfig", queryId, mapOf(
             "currentThemeId" to config.currentThemeId,
@@ -356,7 +356,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleSetConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSetConfig(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val current = configManager.getAppConfig()
         val updated = current.copy(
@@ -371,7 +371,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleUpdateConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleUpdateConfig(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val current = configManager.getAppConfig()
         val updated = current.copy(
@@ -386,7 +386,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleGetModelConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleGetModelConfig(queryId: String, params: JsonElement?): Boolean {
         val modelConfig = configManager.getActiveModelConfig()
         responseCallback?.invoke("getModelConfig", queryId, mapOf(
             "provider" to modelConfig.provider,
@@ -398,7 +398,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleUpdateModelConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleUpdateModelConfig(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val currentAppConfig = configManager.getAppConfig()
         val activeProfileId = currentAppConfig.activeProfileId
@@ -430,12 +430,12 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleGetProviders(queryId: Int): Boolean {
+    private fun handleGetProviders(queryId: String): Boolean {
         responseCallback?.invoke("getProviders", queryId, com.github.claudecode.ccgui.model.config.ModelConfig.getAllProviders(), null)
         return true
     }
 
-    private fun handleGetProviderModels(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleGetProviderModels(queryId: String, params: JsonElement?): Boolean {
         val provider = params?.asJsonObject?.get("provider")?.asString ?: "anthropic"
         responseCallback?.invoke("getProviderModels", queryId, com.github.claudecode.ccgui.model.config.ModelConfig.getProviderModels(provider), null)
         return true
@@ -443,7 +443,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Provider Profile Handlers ====================
 
-    private fun handleGetProviderProfiles(queryId: Int): Boolean {
+    private fun handleGetProviderProfiles(queryId: String): Boolean {
         val profiles = configManager.getProviderProfiles()
         val activeId = configManager.getActiveProfileId()
         val profilesData = profiles.map { profile ->
@@ -470,7 +470,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleCreateProviderProfile(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleCreateProviderProfile(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val profile = com.github.claudecode.ccgui.model.config.ProviderProfile.fromJson(jsonObj)
         configManager.saveProviderProfile(profile)
@@ -478,7 +478,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleUpdateProviderProfile(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleUpdateProviderProfile(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val profile = com.github.claudecode.ccgui.model.config.ProviderProfile.fromJson(jsonObj)
         configManager.saveProviderProfile(profile)
@@ -486,14 +486,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleDeleteProviderProfile(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteProviderProfile(queryId: String, params: JsonElement?): Boolean {
         val profileId = params?.asJsonObject?.get("profileId")?.asString ?: return false
         configManager.deleteProviderProfile(profileId)
         responseCallback?.invoke("deleteProviderProfile", queryId, mapOf("success" to true), null)
         return true
     }
 
-    private fun handleSetActiveProviderProfile(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSetActiveProviderProfile(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val profileId = jsonObj.get("profileId")?.asString?.takeIf { it.isNotEmpty() }
         configManager.setActiveProviderProfile(profileId)
@@ -501,7 +501,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleReorderProviderProfiles(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleReorderProviderProfiles(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val orderedIdsArray = jsonObj.get("orderedIds")?.asJsonArray ?: return false
         val orderedIds = orderedIdsArray.map { it.asString }
@@ -510,7 +510,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleConvertCcSwitchProfile(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleConvertCcSwitchProfile(queryId: String, params: JsonElement?): Boolean {
         val profileId = params?.asJsonObject?.get("profileId")?.asString ?: return false
         val newProfile = configManager.convertCcSwitchProfile(profileId)
         if (newProfile != null) {
@@ -537,7 +537,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Theme Handlers ====================
 
-    private fun handleGetThemes(queryId: Int): Boolean {
+    private fun handleGetThemes(queryId: String): Boolean {
         val themes = configManager.getAllThemes()
         responseCallback?.invoke("getThemes", queryId, themes.map { theme ->
             mapOf(
@@ -549,14 +549,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleUpdateTheme(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleUpdateTheme(queryId: String, params: JsonElement?): Boolean {
         val themeId = params?.asJsonObject?.get("themeId")?.asString ?: return false
         configManager.setCurrentTheme(themeId)
         responseCallback?.invoke("updateTheme", queryId, mapOf("success" to true), null)
         return true
     }
 
-    private fun handleSaveCustomTheme(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSaveCustomTheme(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val id = jsonObj.get("id")?.asString ?: return false
         val name = jsonObj.get("name")?.asString ?: return false
@@ -588,20 +588,20 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleDeleteCustomTheme(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteCustomTheme(queryId: String, params: JsonElement?): Boolean {
         val themeId = params?.asJsonObject?.get("themeId")?.asString ?: return false
         configManager.deleteCustomTheme(themeId)
         responseCallback?.invoke("deleteCustomTheme", queryId, mapOf("success" to true), null)
         return true
     }
 
-    private fun handleGetIdeTheme(queryId: Int): Boolean {
+    private fun handleGetIdeTheme(queryId: String): Boolean {
         val isDark = com.intellij.util.ui.UIUtil.isUnderDarcula()
         responseCallback?.invoke("getIdeTheme", queryId, mapOf("isDark" to isDark), null)
         return true
     }
 
-    private fun handleOptimizePrompt(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleOptimizePrompt(queryId: String, params: JsonElement?): Boolean {
         val prompt = params?.asJsonObject?.get("prompt")?.asString ?: ""
         scope.launch {
             try {
@@ -622,7 +622,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Session Handlers ====================
 
-    private fun handleCreateSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleCreateSession(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject
         val name = jsonObj?.get("name")?.asString ?: "New Session"
         val typeStr = jsonObj?.get("type")?.asString ?: "PROJECT"
@@ -632,21 +632,21 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleSwitchSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSwitchSession(queryId: String, params: JsonElement?): Boolean {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return false
         sessionManager.setCurrentSession(sessionId)
         responseCallback?.invoke("switchSession", queryId, mapOf("success" to true, "currentSessionId" to sessionId), null)
         return true
     }
 
-    private fun handleDeleteSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteSession(queryId: String, params: JsonElement?): Boolean {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return false
         sessionManager.deleteSession(sessionId)
         responseCallback?.invoke("deleteSession", queryId, mapOf("success" to true), null)
         return true
     }
 
-    private fun handleSearchSessions(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSearchSessions(queryId: String, params: JsonElement?): Boolean {
         val query = params?.asJsonObject?.get("query")?.asString ?: ""
         val sessions = sessionManager.searchSessions(query)
         responseCallback?.invoke("searchSessions", queryId, sessions.map { session ->
@@ -662,14 +662,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleExportSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleExportSession(queryId: String, params: JsonElement?): Boolean {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return false
         val session = sessionManager.getSession(sessionId) ?: return false
         responseCallback?.invoke("exportSession", queryId, session.toJson(), null)
         return true
     }
 
-    private fun handleImportSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleImportSession(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val jsonContent = jsonObj.get("data")?.asString ?: return false
         val session = sessionManager.importSession(jsonContent) ?: return false
@@ -677,7 +677,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleGetHistorySessions(queryId: Int): Boolean {
+    private fun handleGetHistorySessions(queryId: String): Boolean {
         val sessions = sessionManager.getHistorySessions()
         responseCallback?.invoke("getHistorySessions", queryId, sessions.map { session ->
             mapOf(
@@ -693,7 +693,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleConfirmSession(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleConfirmSession(queryId: String, params: JsonElement?): Boolean {
         val sessionId = params?.asJsonObject?.get("sessionId")?.asString ?: return false
         sessionManager.confirmSession(sessionId)
         responseCallback?.invoke("confirmSession", queryId, mapOf("success" to true), null)
@@ -702,7 +702,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Skills Handlers ====================
 
-    private fun handleGetSkills(queryId: Int): Boolean {
+    private fun handleGetSkills(queryId: String): Boolean {
         val skills = skillsManager.getAllSkills()
         responseCallback?.invoke("getSkills", queryId, skills.map { skill ->
             mapOf(
@@ -715,7 +715,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleSaveSkill(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSaveSkill(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val id = jsonObj.get("id")?.asString ?: return false
         val name = jsonObj.get("name")?.asString ?: return false
@@ -739,14 +739,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleDeleteSkill(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteSkill(queryId: String, params: JsonElement?): Boolean {
         val skillId = params?.asJsonObject?.get("skillId")?.asString ?: return false
         val success = skillsManager.deleteSkill(skillId)
         responseCallback?.invoke("deleteSkill", queryId, mapOf("success" to success), null)
         return true
     }
 
-    private fun handleExecuteSkill(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleExecuteSkill(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val skillId = jsonObj.get("skillId")?.asString ?: return false
         val skill = skillsManager.getSkill(skillId) ?: return false
@@ -766,7 +766,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Agents Handlers ====================
 
-    private fun handleGetAgents(queryId: Int): Boolean {
+    private fun handleGetAgents(queryId: String): Boolean {
         val agents = agentsManager.getAllAgents()
         responseCallback?.invoke("getAgents", queryId, agents.map { agent ->
             mapOf(
@@ -780,7 +780,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleSaveAgent(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSaveAgent(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val id = jsonObj.get("id")?.asString ?: return false
         val name = jsonObj.get("name")?.asString ?: return false
@@ -798,14 +798,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleDeleteAgent(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteAgent(queryId: String, params: JsonElement?): Boolean {
         val agentId = params?.asJsonObject?.get("agentId")?.asString ?: return false
         val success = agentsManager.deleteAgent(agentId)
         responseCallback?.invoke("deleteAgent", queryId, mapOf("success" to success), null)
         return true
     }
 
-    private fun handleStartAgent(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleStartAgent(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val agentId = jsonObj.get("agentId")?.asString ?: return false
         val taskDesc = jsonObj.get("task")?.asString ?: ""
@@ -828,7 +828,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleStopAgent(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleStopAgent(queryId: String, params: JsonElement?): Boolean {
         val agentId = params?.asJsonObject?.get("agentId")?.asString ?: return false
         agentsManager.markTaskCompleted(agentId, false)
         responseCallback?.invoke("stopAgent", queryId, mapOf("success" to true), null)
@@ -837,7 +837,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== MCP Handlers ====================
 
-    private fun handleGetMcpServers(queryId: Int): Boolean {
+    private fun handleGetMcpServers(queryId: String): Boolean {
         val servers = mcpServerManager.getAllServers()
         responseCallback?.invoke("getMcpServers", queryId, servers.map { server ->
             mapOf(
@@ -852,7 +852,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleSaveMcpServer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSaveMcpServer(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val id = jsonObj.get("id")?.asString ?: return false
         val name = jsonObj.get("name")?.asString ?: return false
@@ -872,14 +872,14 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleDeleteMcpServer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleDeleteMcpServer(queryId: String, params: JsonElement?): Boolean {
         val serverId = params?.asJsonObject?.get("serverId")?.asString ?: return false
         val success = mcpServerManager.deleteServer(serverId)
         responseCallback?.invoke("deleteMcpServer", queryId, mapOf("success" to success), null)
         return true
     }
 
-    private fun handleStartMcpServer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleStartMcpServer(queryId: String, params: JsonElement?): Boolean {
         val serverId = params?.asJsonObject?.get("serverId")?.asString ?: return false
         val eventCb = eventCallback
         scope.launch {
@@ -890,7 +890,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleStopMcpServer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleStopMcpServer(queryId: String, params: JsonElement?): Boolean {
         val serverId = params?.asJsonObject?.get("serverId")?.asString ?: return false
         val eventCb = eventCallback
         scope.launch {
@@ -901,7 +901,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleTestMcpServer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleTestMcpServer(queryId: String, params: JsonElement?): Boolean {
         val serverId = params?.asJsonObject?.get("serverId")?.asString ?: return false
         val eventCb = eventCallback
         scope.launch {
@@ -915,7 +915,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Interactive Handlers ====================
 
-    private fun handleSubmitAnswer(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleSubmitAnswer(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val questionId = jsonObj.get("questionId")?.asString ?: return false
         val typeStr = jsonObj.get("type")?.asString ?: "text"
@@ -953,7 +953,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Chat Config Handlers ====================
 
-    private fun handleGetChatConfig(queryId: Int): Boolean {
+    private fun handleGetChatConfig(queryId: String): Boolean {
         responseCallback?.invoke("getChatConfig", queryId, mapOf(
             "conversationMode" to chatConfigService.getConversationMode().name,
             "currentAgentId" to chatConfigService.getCurrentAgentId(),
@@ -962,7 +962,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleUpdateChatConfig(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleUpdateChatConfig(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         jsonObj.get("conversationMode")?.asString?.let {
             chatConfigService.setConversationMode(ConversationMode.valueOf(it))
@@ -979,14 +979,14 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Conversation Mode Handlers ====================
 
-    private fun handleGetConversationModes(queryId: Int): Boolean {
+    private fun handleGetConversationModes(queryId: String): Boolean {
         responseCallback?.invoke("getConversationModes", queryId, ConversationMode.getAllModeDescriptions(), null)
         return true
     }
 
     // ==================== Settings Handlers ====================
 
-    private fun handleOpenSettings(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleOpenSettings(queryId: String, params: JsonElement?): Boolean {
         val tabId = params?.asJsonObject?.get("tabId")?.asString
         eventCallback?.invoke("ui.settings.open", mapOf("tabId" to (tabId ?: "")))
         responseCallback?.invoke("openSettings", queryId, mapOf("success" to true), null)
@@ -995,7 +995,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Task Status Handlers ====================
 
-    private fun handleGetTaskStatus(queryId: Int): Boolean {
+    private fun handleGetTaskStatus(queryId: String): Boolean {
         val tasks = taskProgressTracker.getActiveTasks().map { task ->
             mapOf(
                 "taskId" to task.taskId,
@@ -1017,7 +1017,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Slash Command Handlers ====================
 
-    private fun handleExecuteSlashCommand(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleExecuteSlashCommand(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val command = jsonObj.get("command")?.asString ?: return false
         val sessionId = sessionManager.getCurrentSession()?.id ?: return false
@@ -1073,7 +1073,7 @@ class JsRequestHandler(private val project: Project) {
 
     // ==================== Editor Integration Handlers ====================
 
-    private fun handleGetSelectedText(queryId: Int): Boolean {
+    private fun handleGetSelectedText(queryId: String): Boolean {
         val editor = FileEditorManager.getInstance(project).selectedTextEditor
         val selectedText = editor?.selectionModel?.selectedText ?: ""
         val fileName = editor?.virtualFile?.name ?: ""
@@ -1087,7 +1087,7 @@ class JsRequestHandler(private val project: Project) {
         return true
     }
 
-    private fun handleReplaceSelectedText(queryId: Int, params: JsonElement?): Boolean {
+    private fun handleReplaceSelectedText(queryId: String, params: JsonElement?): Boolean {
         val jsonObj = params?.asJsonObject ?: return false
         val newText = jsonObj.get("text")?.asString ?: return false
         val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return false

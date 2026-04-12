@@ -238,7 +238,7 @@ class BridgeManager(private val project: Project) : Disposable {
     /**
      * 处理前端响应
      */
-    fun handleResponse(queryId: Int, result: Any?, error: String? = null) {
+    fun handleResponse(queryId: String, result: Any?, error: String? = null) {
         // 这个方法由 CefBrowserPanel 调用，用于响应前端的请求
         log.debug("Handling response for queryId: $queryId")
     }

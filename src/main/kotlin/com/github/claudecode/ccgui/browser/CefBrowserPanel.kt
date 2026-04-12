@@ -334,7 +334,7 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      * @param response 响应数据（null 表示错误）
      * @param error 错误信息（可选）
      */
-    private fun sendResponseToJs(action: String, queryId: Int, response: Any?, error: String? = null) {
+    private fun sendResponseToJs(action: String, queryId: String, response: Any?, error: String? = null) {
         // java-bridge.ts 监听 'response' 事件，格式: {queryId, result, error}
         val data: Map<String, Any> = when {
             error != null -> mapOf("queryId" to queryId, "error" to error)
@@ -390,14 +390,16 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                     return;
                 }
 
-                console.log('[Bridge] Injecting simplified Bridge...');
-
-                // 获取 JBCefJSQuery 注入的函数引用
-                var _jcefQuery = $injectFunction;
+                console.log('[Bridge] Injecting Bridge...');
 
                 // 挂起的请求队列
                 var _pendingRequests = {};
                 var REQUEST_TIMEOUT = 10000; // 10秒超时
+
+                // 创建 sendToJava 函数 - JBCefJSQuery 的 inject() 返回需要包装在函数中
+                var sendToJava = function(msg) {
+                    $injectFunction
+                };
 
                 // ccEvents：事件总线，Kotlin sendToJavaScript() 直接调用
                 window.ccEvents = {
@@ -430,18 +432,26 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                 // ccBackend.send()：通过 JBCefJSQuery 发送请求
                 window.ccBackend = {
                     send: function(action, params) {
-                        var queryId = 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                        // 优先使用前端传递的 _queryId，否则生成新的
+                        var queryId = (params && params._queryId) || ('q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
+
+                        // 移除 _queryId，避免传递到后端
+                        var cleanParams = params || {};
+                        if (cleanParams._queryId) {
+                            delete cleanParams._queryId;
+                        }
+
                         var payload = JSON.stringify({
                             queryId: queryId,
                             action: action,
-                            params: params || {}
+                            params: cleanParams
                         });
 
-                        console.log('[Bridge] Sending:', action, params);
+                        console.log('[Bridge] Sending:', action, params, 'queryId:', queryId);
 
-                        // 发送请求到 Kotlin
+                        // 发送请求到 Kotlin - 直接执行 JBCefJSQuery 注入的代码
                         try {
-                            _jcefQuery(payload);
+                            (function(msg) { $injectFunction })(payload);
                         } catch (e) {
                             console.error('[Bridge] Send error:', e);
                         }
@@ -621,20 +631,15 @@ class CefBrowserPanel(private val project: Project) : Disposable {
 
         browser?.loadHTML(htmlContent, baseUrl)
 
-        // 等待页面加载完成后注入 Bridge（带后备超时）
-        executeWhenPageLoaded(Runnable {
-            log.info("[CefBrowserPanel] HTML content loaded, injecting bridge")
-            injectBackendJavaScript()
-        })
-
-        // 后备：如果5秒后仍未加载完成，强制注入
+        // 对于 loadHTML()，页面加载监听器可能不会可靠触发
+        // 直接使用延迟注入策略，让 DOM 先解析
         scope.launch {
-            delay(5000)
-            if (!isPageLoaded) {
-                log.warn("[CefBrowserPanel] HTML load timeout (5s), forcing bridge injection")
-                isPageLoaded = true
-                injectBackendJavaScript()
-            }
+            // 延迟 200ms 让 DOM 解析和初始 JavaScript 执行
+            // React 需要先挂载，JcefBrowser 才能开始等待 Bridge
+            delay(200)
+            log.info("[CefBrowserPanel] Injecting bridge after delay (loadHTML mode)")
+            isPageLoaded = true
+            injectBackendJavaScript()
         }
     }
 

@@ -179,10 +179,12 @@ intellijPlatformTesting {
 
 /**
  * 构建前端 webview（React + TypeScript + Vite）
- * 当 webview/src 有变更时重新构建，无变更时跳过
+ *
+ * 使用 vite-plugin-singlefile 将所有资源内联到单个 HTML 文件
+ * 构建后自动通过 npm postbuild 钩子复制到 src/main/resources/html/claude-chat.html
  */
 val buildWebview by tasks.registering(Exec::class) {
-    description = "Build frontend webview assets with Vite"
+    description = "Build frontend webview assets with Vite (single file bundle)"
     workingDir = file("webview")
 
     // Windows 兼容：使用 cmd /c 执行 npm
@@ -198,26 +200,11 @@ val buildWebview by tasks.registering(Exec::class) {
     inputs.file(file("webview/vite.config.ts"))
     inputs.file(file("webview/tsconfig.json"))
     inputs.file(file("webview/package-lock.json"))
-    outputs.dir(file("webview/dist"))
-}
-
-/**
- * 将前端构建产物复制到 resources 目录
- * 使其在插件 JAR 中可用（classpath 加载）
- */
-val copyWebview by tasks.registering(Copy::class) {
-    description = "Copy webview build output to resources for classpath loading"
-    dependsOn(buildWebview)
-
-    from(file("webview/dist"))
-    into(file("src/main/resources/webview/dist"))
-
-    // 增量：仅当 dist 内容变更时复制
-    inputs.dir(file("webview/dist"))
-    outputs.dir(file("src/main/resources/webview/dist"))
+    // 输出：单个 HTML 文件（通过 npm postbuild 钩子复制）
+    outputs.file(file("src/main/resources/html/claude-chat.html"))
 }
 
 // 让资源处理阶段自动依赖前端构建
 tasks.named("processResources") {
-    dependsOn(copyWebview)
+    dependsOn(buildWebview)
 }

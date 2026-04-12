@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "postbuild": "node scripts/fix-html.mjs && node scripts/copy-dist.mjs",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
@@ -60,6 +61,7 @@
     "terser": "^5.46.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
+    "vite-plugin-singlefile": "^2.3.0",
     "vitest": "^4.1.3"
   }
 }

@@ -38,7 +38,7 @@ export function JcefBrowser({
      */
     const waitForJcef = async (): Promise<void> => {
       const CHECK_INTERVAL = 100;
-      const MAX_ATTEMPTS = 50;  // 5秒超时
+      const MAX_ATTEMPTS = 100;  // 10秒超时（给 Bridge 注入更多时间）
 
       // 检查 bridge 是否就绪（window.ccBackend && window.ccEvents 存在）
       const isBridgeInjected = (): boolean => {
