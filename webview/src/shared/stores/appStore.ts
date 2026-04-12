@@ -175,18 +175,87 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ========== 初始化 ==========
   initializeSessions: async () => {
+    // 检查 bridge 是否就绪
+    if (!window.ccBackend) {
+      console.warn('[appStore] Bridge not ready, skipping session initialization');
+      // 创建一个默认会话，确保 UI 可以正常显示
+      const defaultSession: ChatSession = {
+        id: 'default-' + Date.now(),
+        name: '新会话',
+        type: 'PROJECT' as SessionType,
+        messages: [],
+        context: {
+          modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6', maxTokens: 4096, temperature: 0.7, topP: 1.0 },
+          enabledSkills: [],
+          enabledMcpServers: [],
+          metadata: {}
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isActive: true,
+        status: 'IDLE' as any,
+        isInitialized: false
+      };
+      set({ sessions: [defaultSession], currentSessionId: defaultSession.id });
+      useSessionStore.getState().initSessionState(defaultSession.id);
+      return;
+    }
+
     try {
       // 从后端获取会话列表
-      const sessions = await window.ccBackend?.searchSessions('');
-      if (sessions) {
+      const sessions = await window.ccBackend.searchSessions('');
+      if (sessions && sessions.length > 0) {
         set({ sessions });
         // 为每个会话初始化 sessionState，确保切换时 getSessionState 返回有效状态
         sessions.forEach((session: ChatSession) => {
           useSessionStore.getState().initSessionState(session.id);
         });
+        console.log('[appStore] Loaded', sessions.length, 'sessions from backend');
+      } else {
+        // 没有会话，创建一个默认会话
+        console.log('[appStore] No sessions found, creating default session');
+        const defaultSession: ChatSession = {
+          id: 'default-' + Date.now(),
+          name: '新会话',
+          type: 'PROJECT' as SessionType,
+          messages: [],
+          context: {
+            modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6', maxTokens: 4096, temperature: 0.7, topP: 1.0 },
+            enabledSkills: [],
+            enabledMcpServers: [],
+            metadata: {}
+          },
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isActive: true,
+          status: 'IDLE' as any,
+          isInitialized: false
+        };
+        set({ sessions: [defaultSession], currentSessionId: defaultSession.id });
+        useSessionStore.getState().initSessionState(defaultSession.id);
       }
     } catch (error) {
-      console.error('Failed to initialize sessions:', error);
+      console.error('[appStore] Failed to initialize sessions:', error);
+      // 即使失败，也创建一个默认会话，确保 UI 可用
+      const defaultSession: ChatSession = {
+        id: 'default-' + Date.now(),
+        name: '新会话',
+        type: 'PROJECT' as SessionType,
+        messages: [],
+        context: {
+          modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6', maxTokens: 4096, temperature: 0.7, topP: 1.0 },
+          enabledSkills: [],
+          enabledMcpServers: [],
+          metadata: {}
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isActive: true,
+        status: 'IDLE' as any,
+        isInitialized: false
+      };
+      set({ sessions: [defaultSession], currentSessionId: defaultSession.id });
+      useSessionStore.getState().initSessionState(defaultSession.id);
     }
   }
 }));

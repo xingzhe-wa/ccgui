@@ -120,12 +120,35 @@ function App(): JSX.Element {
     };
   }, []);
 
+  /**
+   * 初始化回调 - JcefBrowser 会等待这个 Promise 完成
+   */
+  const handleReady = useCallback(async (): Promise<void> => {
+    console.log('[App] Starting initialization...');
+
+    try {
+      // 初始化 sessions（如果后端就绪）
+      await useAppStore.getState().initializeSessions();
+      console.log('[App] Sessions initialized');
+    } catch (error) {
+      console.error('[App] Failed to initialize sessions:', error);
+      // 不阻塞初始化，即使 session 初始化失败也继续
+    }
+
+    try {
+      // 加载 chat 配置
+      await useChatConfigStore.getState().loadChatConfig();
+      console.log('[App] Chat config loaded');
+    } catch (error) {
+      console.error('[App] Failed to load chat config:', error);
+    }
+
+    console.log('[App] Initialization complete');
+  }, []);
+
   return (
     <ErrorBoundary>
-      <JcefBrowser onReady={() => {
-        useAppStore.getState().initializeSessions();
-        useChatConfigStore.getState().loadChatConfig();
-      }}>
+      <JcefBrowser onReady={handleReady}>
         <Suspense fallback={<LoadingFallback />}>
           <AppRouter />
         </Suspense>

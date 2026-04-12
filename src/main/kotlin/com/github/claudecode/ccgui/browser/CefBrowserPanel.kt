@@ -76,10 +76,27 @@ class CefBrowserPanel(private val project: Project) : Disposable {
      */
     fun init(): JBCefBrowser {
         if (browser != null) {
+            log.info("[CefBrowserPanel] Already initialized, returning existing browser")
             return browser!!
         }
 
+        log.info("[CefBrowserPanel] Initializing JCEF browser...")
+        log.info("[CefBrowserPanel] Java version: ${System.getProperty("java.version")}")
+        log.info("[CefBrowserPanel] OS: ${System.getProperty("os.name")} ${System.getProperty("os.version")}")
+
+        // 使用 JBCefBrowser 的 builder 模式确保正确初始化
         browser = JBCefBrowser()
+
+        // 确保组件可见性设置
+        browser?.component?.isVisible = true
+        browser?.component?.isEnabled = true
+
+        // 诊断：检查 browser 组件状态
+        log.info("[CefBrowserPanel] Browser component created: ${browser?.component != null}")
+        log.info("[CefBrowserPanel] Component class: ${browser?.component?.javaClass?.name}")
+        log.info("[CefBrowserPanel] Component size before add: ${browser?.component?.size}")
+        log.info("[CefBrowserPanel] Component preferred size: ${browser?.component?.preferredSize}")
+        log.info("[CefBrowserPanel] CefBrowser: ${browser?.getCefBrowser() != null}")
 
         // 设置 JS 查询回调
         setupJsQuery()
@@ -90,10 +107,59 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         // 设置请求处理器回调
         setupRequestHandlerCallbacks()
 
+        // 诊断：启动一个监控任务，定期检查浏览器状态
+        startBrowserHealthCheck()
+
         isInitialized = true
-        log.info("CefBrowserPanel initialized")
+        log.info("[CefBrowserPanel] CefBrowserPanel initialized successfully")
 
         return browser!!
+    }
+
+    /**
+     * 浏览器健康检查 - 诊断用
+     */
+    private fun startBrowserHealthCheck() {
+        scope.launch {
+            var checkCount = 0
+            var lastUrl: String? = null
+            while (isActive && !isDisposed) {
+                delay(2000)
+                checkCount++
+                try {
+                    val cefBrowser = browser?.getCefBrowser()
+                    if (cefBrowser != null) {
+                        val currentUrl = browser?.cefBrowser?.url
+                        if (checkCount <= 10 || currentUrl != lastUrl) {
+                            log.debug("[CefBrowserPanel] Health check $checkCount: cefBrowser OK, URL: $currentUrl")
+                            lastUrl = currentUrl
+                        }
+                        // 尝试执行一个简单的 JS 来验证浏览器是否响应
+                        try {
+                            val testResult = cefBrowser.executeJavaScript(
+                                "typeof window !== 'undefined' ? 'ok' : 'no-window'",
+                                currentUrl ?: "about:blank", 0
+                            )
+                            if (checkCount <= 5) {
+                                log.debug("[CefBrowserPanel] Health check $checkCount JS result: $testResult")
+                            }
+                        } catch (jsError: Exception) {
+                            if (checkCount <= 5) {
+                                log.warn("[CefBrowserPanel] Health check $checkCount JS failed: ${jsError.message}")
+                            }
+                        }
+                    } else {
+                        if (checkCount <= 10) {
+                            log.warn("[CefBrowserPanel] Health check $checkCount: cefBrowser is null")
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (checkCount <= 5) {
+                        log.warn("[CefBrowserPanel] Health check $checkCount failed: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -119,19 +185,54 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         browser?.let { b ->
             try {
                 val client = b.jbCefClient
+                val cefBrowser = b.getCefBrowser()
+
+                log.info("[CefBrowserPanel] Setting up load listener...")
+                log.info("[CefBrowserPanel] Client class: ${client.javaClass.name}")
+                log.info("[CefBrowserPanel] CefBrowser: $cefBrowser")
+
                 // 使用反射查找合适的 load handler 接口
                 val handlerClass = Class.forName("org.cef.handler.CefLoadHandler")
                 val handler = java.lang.reflect.Proxy.newProxyInstance(
                     handlerClass.classLoader,
                     arrayOf(handlerClass)
                 ) { _, method, args ->
+                    log.debug("[CefBrowserPanel] Load handler method called: ${method.name}, args: ${args?.contentToString()}")
                     when (method.name) {
                         "onLoadingStateChange" -> {
-                            if (args.size >= 4) {
-                                val isLoading = args[0] as Boolean
-                                val url = args[1] as String
-                                if (!isLoading && url.isNotEmpty()) {
-                                    log.debug("Page loaded: $url")
+                            log.info("[CefBrowserPanel] onLoadingStateChange called with ${args?.size} args")
+                            if (args != null && args.size >= 4) {
+                                try {
+                                    val isLoading = args[1] as Boolean
+                                    val canGoBack = args[2] as Boolean
+                                    val canGoForward = args[3] as Boolean
+                                    log.info("[CefBrowserPanel] Loading state - isLoading: $isLoading, canGoBack: $canGoBack, canGoForward: $canGoForward")
+
+                                    // 获取当前 URL
+                                    val currentUrl = b.cefBrowser?.url ?: "unknown"
+                                    if (!isLoading && currentUrl.isNotEmpty()) {
+                                        log.info("[CefBrowserPanel] Page loaded: $currentUrl")
+                                        isPageLoaded = true
+                                        loadListeners.forEach { it.run() }
+                                        loadListeners.clear()
+                                    }
+                                } catch (e: Exception) {
+                                    log.error("[CefBrowserPanel] Error parsing onLoadingStateChange args", e)
+                                }
+                            }
+                            null
+                        }
+                        "onLoadStart" -> {
+                            log.info("[CefBrowserPanel] onLoadStart: ${args?.contentToString()}")
+                            null
+                        }
+                        "onLoadEnd" -> {
+                            log.info("[CefBrowserPanel] onLoadEnd: ${args?.contentToString()}")
+                            if (args != null && args.size >= 3) {
+                                val url = args[1] as? String ?: ""
+                                val httpStatusCode = args[2] as? Int ?: 0
+                                log.info("[CefBrowserPanel] Load ended - URL: $url, Status: $httpStatusCode")
+                                if (httpStatusCode == 200 || httpStatusCode == 0) {
                                     isPageLoaded = true
                                     loadListeners.forEach { it.run() }
                                     loadListeners.clear()
@@ -139,18 +240,42 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                             }
                             null
                         }
+                        "onLoadError" -> {
+                            log.warn("[CefBrowserPanel] onLoadError: ${args?.contentToString()}")
+                            null
+                        }
                         else -> null
                     }
                 }
-                val addLoadHandlerMethod = client.javaClass.getMethod(
-                    "addLoadHandler",
-                    Class.forName("org.cef.handler.CefLoadHandler"),
-                    Class.forName("org.cef.browser.CefBrowser")
-                )
-                addLoadHandlerMethod.invoke(client, handler, b.getCefBrowser())
-                loadListenerSetup = true
+
+                // 尝试不同的方法签名
+                try {
+                    val addLoadHandlerMethod = client.javaClass.getMethod(
+                        "addLoadHandler",
+                        Class.forName("org.cef.handler.CefLoadHandler"),
+                        Class.forName("org.cef.browser.CefBrowser")
+                    )
+                    addLoadHandlerMethod.invoke(client, handler, cefBrowser)
+                    loadListenerSetup = true
+                    log.info("[CefBrowserPanel] Load listener setup successfully")
+                } catch (e: NoSuchMethodException) {
+                    // 尝试不带 CefBrowser 参数的版本
+                    log.warn("[CefBrowserPanel] addLoadHandler(CefLoadHandler, CefBrowser) not found, trying single param version")
+                    try {
+                        val addLoadHandlerMethod2 = client.javaClass.getMethod(
+                            "addLoadHandler",
+                            Class.forName("org.cef.handler.CefLoadHandler")
+                        )
+                        addLoadHandlerMethod2.invoke(client, handler)
+                        loadListenerSetup = true
+                        log.info("[CefBrowserPanel] Load listener setup successfully (single param)")
+                    } catch (e2: Exception) {
+                        log.error("[CefBrowserPanel] Failed to setup load listener: ${e2.message}", e2)
+                    }
+                }
             } catch (e: Exception) {
-                log.warn("Failed to setup load listener: ${e.message}")
+                log.warn("[CefBrowserPanel] Failed to setup load listener (will use fallback): ${e.message}", e)
+                // 不要设置 loadListenerSetup = true，让 fallback 机制处理
             }
         }
     }
@@ -238,24 +363,24 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         // 防止重复注入
         synchronized(bridgeInjectionLock) {
             if (isBridgeInjected) {
-                log.debug("Bridge already injected, skipping")
+                log.debug("[CefBrowserPanel] Bridge already injected, skipping")
                 return
             }
             isBridgeInjected = true
         }
 
         val cefBrowser = browser?.getCefBrowser() ?: run {
-            log.warn("Browser is null, cannot inject Bridge")
+            log.error("[CefBrowserPanel] Browser is null, cannot inject Bridge")
             return
         }
 
         // 获取 JBCefJSQuery 注入的函数名
         val injectFunction = jsQuery?.inject("msg") ?: run {
-            log.error("JBCefJSQuery not initialized")
+            log.error("[CefBrowserPanel] JBCefJSQuery not initialized, cannot inject bridge")
             return
         }
 
-        log.info("Injecting Bridge with function: $injectFunction")
+        log.info("[CefBrowserPanel] Injecting Bridge with function: $injectFunction")
 
         // 简化的 Bridge 脚本
         val bridgeScript = """
@@ -355,7 +480,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         """.trimIndent()
 
         // 执行 Bridge 注入脚本
-        cefBrowser.executeJavaScript(bridgeScript, cefBrowser.url, 0)
+        val currentUrl = browser?.cefBrowser?.url ?: "about:blank"
+        cefBrowser.executeJavaScript(bridgeScript, currentUrl, 0)
         log.info("Bridge injected successfully")
 
         // 启动健康检查
@@ -370,12 +496,16 @@ class CefBrowserPanel(private val project: Project) : Disposable {
             while (isActive && !isDisposed) {
                 delay(5000) // 5秒心跳
                 try {
-                    val jsCode = """
-                        if (window.ccBackend && window.ccBackend._healthCheck) {
-                            window.ccBackend._healthCheck(new Date().toISOString());
-                        }
-                    """.trimIndent()
-                    browser?.getCefBrowser()?.executeJavaScript(jsCode, browser?.getCefBrowser()?.url, 0)
+                    val cefBrowser = browser?.getCefBrowser()
+                    if (cefBrowser != null) {
+                        val currentUrl = browser?.cefBrowser?.url ?: "about:blank"
+                        val jsCode = """
+                            if (window.ccBackend && window.ccBackend._healthCheck) {
+                                window.ccBackend._healthCheck(new Date().toISOString());
+                            }
+                        """.trimIndent()
+                        cefBrowser.executeJavaScript(jsCode, currentUrl, 0)
+                    }
                 } catch (e: Exception) {
                     log.warn("Bridge health check failed", e)
                 }
@@ -411,7 +541,8 @@ class CefBrowserPanel(private val project: Project) : Disposable {
                     .replace("\r", "")
 
                 val js = "window.ccEvents && window.ccEvents.emit('$safeEvent', JSON.parse('$safeJsonForJs'));"
-                cefBrowser.executeJavaScript(js, cefBrowser.url, 0)
+                val currentUrl = b.cefBrowser?.url ?: "about:blank"
+                cefBrowser.executeJavaScript(js, currentUrl, 0)
             } catch (e: Exception) {
                 log.error("Error sending to JavaScript: ${e.message}", e)
             }
@@ -426,16 +557,52 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         isPageLoaded = false
         isBridgeInjected = false
 
-        browser?.loadURL(url)
+        log.info("[CefBrowserPanel] Loading URL: $url")
+        log.info("[CefBrowserPanel] Browser component valid: ${browser?.component != null}")
+        log.info("[CefBrowserPanel] Component displayable: ${browser?.component?.isDisplayable}")
+        log.info("[CefBrowserPanel] Component showing: ${browser?.component?.isShowing}")
+
+        // 验证 CefBrowser 是否可用
+        val cefBrowser = browser?.getCefBrowser()
+        if (cefBrowser == null) {
+            log.error("[CefBrowserPanel] CefBrowser is null! Cannot load URL")
+            return
+        }
+
+        // 启动一个协程来等待组件可显示后再加载 URL
+        scope.launch {
+            // 等待组件变成 displayable（已添加到显示层级）
+            var waited = 0
+            while (browser?.component?.isDisplayable != true && waited < 50) {
+                delay(100)
+                waited++
+            }
+
+            if (waited >= 50) {
+                log.warn("[CefBrowserPanel] Component not displayable after 5 seconds, loading anyway")
+            } else {
+                log.info("[CefBrowserPanel] Component became displayable after ${waited * 100}ms")
+            }
+
+            // 直接使用 loadURL，JCEF 可以正确处理 HTTP URL
+            log.info("[CefBrowserPanel] Calling loadURL on browser...")
+            browser?.loadURL(url)
+
+            log.info("[CefBrowserPanel] loadURL called, current URL: ${browser?.cefBrowser?.url}")
+        }
 
         // 等待页面加载完成后注入 Bridge（带后备超时）
-        executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+        executeWhenPageLoaded(Runnable {
+            log.info("[CefBrowserPanel] Page load event received, injecting bridge")
+            injectBackendJavaScript()
+        })
 
-        // 后备：如果3秒后仍未加载完成，强制注入
+        // 后备：如果5秒后仍未加载完成，强制注入
         scope.launch {
-            delay(3000)
+            delay(5000)
             if (!isPageLoaded) {
-                log.warn("Page load timeout, forcing bridge injection")
+                log.warn("[CefBrowserPanel] Page load timeout (5s), forcing bridge injection")
+                log.warn("[CefBrowserPanel] Current URL at timeout: ${browser?.cefBrowser?.url}")
                 isPageLoaded = true
                 injectBackendJavaScript()
             }
@@ -450,16 +617,21 @@ class CefBrowserPanel(private val project: Project) : Disposable {
         isPageLoaded = false
         isBridgeInjected = false
 
+        log.info("[CefBrowserPanel] Loading HTML content with baseUrl: $baseUrl")
+
         browser?.loadHTML(htmlContent, baseUrl)
 
         // 等待页面加载完成后注入 Bridge（带后备超时）
-        executeWhenPageLoaded(Runnable { injectBackendJavaScript() })
+        executeWhenPageLoaded(Runnable {
+            log.info("[CefBrowserPanel] HTML content loaded, injecting bridge")
+            injectBackendJavaScript()
+        })
 
-        // 后备：如果3秒后仍未加载完成，强制注入
+        // 后备：如果5秒后仍未加载完成，强制注入
         scope.launch {
-            delay(3000)
+            delay(5000)
             if (!isPageLoaded) {
-                log.warn("Page load timeout, forcing bridge injection")
+                log.warn("[CefBrowserPanel] HTML load timeout (5s), forcing bridge injection")
                 isPageLoaded = true
                 injectBackendJavaScript()
             }

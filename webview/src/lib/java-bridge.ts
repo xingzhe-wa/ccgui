@@ -15,12 +15,26 @@ class JavaBridge {
     reject: (error: Error) => void;
   }>();
   private responseHandler: (() => void) | null = null;
+  private _isReady = false;
+
+  /**
+   * 检查 Bridge 是否已就绪
+   */
+  get isReady(): boolean {
+    return this._isReady && !!window.ccBackend && !!window.ccEvents;
+  }
 
   /**
    * 通用调用方法
    * 通过 JBCefJSQuery 向 Java 发送请求
    */
   private async invoke<T>(action: string, params?: any): Promise<T> {
+    // 如果 bridge 未就绪，抛出明确错误
+    if (!this.isReady) {
+      console.warn(`[JavaBridge] Bridge not ready for action: ${action}`);
+      throw new Error(`Bridge not ready for action: ${action}. Call init() first and wait for isReady to be true.`);
+    }
+
     const queryId = ++this.queryId;
 
     return new Promise<T>((resolve, reject) => {
@@ -48,7 +62,7 @@ class JavaBridge {
         if (window.ccBackend && window.ccBackend.send) {
           window.ccBackend.send(action, params);
         } else {
-          throw new Error('Bridge not ready');
+          throw new Error('Bridge send method not available');
         }
       } catch (error) {
         clearTimeout(timeout);
@@ -60,17 +74,30 @@ class JavaBridge {
 
   /**
    * 初始化：等待 Java 注入并监听响应
+   * 返回 Promise，在 bridge 完全就绪后 resolve
    */
   async init(): Promise<void> {
+    console.log('[JavaBridge] init() called, waiting for Java bridge injection...');
+
+    // 如果已经 ready，直接返回
+    if (this.isReady) {
+      console.log('[JavaBridge] Already initialized');
+      return;
+    }
+
     // 如果已有监听器，先清理
     if (this.responseHandler) {
       this.responseHandler();
       this.responseHandler = null;
     }
 
-    return new Promise<void>((resolve) => {
-      // 等待Java注入完成
+    return new Promise<void>((resolve, reject) => {
+      const MAX_WAIT_TIME = 10000; // 10秒最大等待时间
+      const CHECK_INTERVAL = 50;
+      let elapsed = 0;
+
       const checkReady = () => {
+        console.log(`[JavaBridge] Checking bridge... window.ccBackend=${!!window.ccBackend}, window.ccEvents=${!!window.ccEvents}`);
         if (window.ccBackend && window.ccEvents) {
           // 监听响应事件，并存储取消订阅函数
           this.responseHandler = window.ccEvents.on('response', (data: any) => {
@@ -86,13 +113,40 @@ class JavaBridge {
               this.pendingRequests.delete(queryId);
             }
           });
+          this._isReady = true;
+          console.log('[JavaBridge] Initialized successfully');
           resolve();
         } else {
-          requestAnimationFrame(checkReady);
+          elapsed += CHECK_INTERVAL;
+          if (elapsed >= MAX_WAIT_TIME) {
+            console.error('[JavaBridge] Initialization timeout after', MAX_WAIT_TIME, 'ms');
+            reject(new Error(`Bridge initialization timeout after ${MAX_WAIT_TIME}ms`));
+          } else {
+            // 使用 setTimeout 而非 requestAnimationFrame，更可控
+            setTimeout(checkReady, CHECK_INTERVAL);
+          }
         }
       };
+
+      // 立即检查一次
       checkReady();
     });
+  }
+
+  /**
+   * 强制重置 Bridge 状态（用于错误恢复）
+   */
+  reset(): void {
+    this._isReady = false;
+    if (this.responseHandler) {
+      this.responseHandler();
+      this.responseHandler = null;
+    }
+    // 清理所有 pending 请求
+    this.pendingRequests.forEach((pending) => {
+      pending.reject(new Error('Bridge reset'));
+    });
+    this.pendingRequests.clear();
   }
 
   // ========== 实现 JavaBackendAPI 接口 ==========

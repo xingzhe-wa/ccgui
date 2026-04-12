@@ -33,8 +33,31 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// 全局错误处理 - 捕获所有未处理的错误
+window.onerror = (message, source, lineno, colno, error) => {
+  console.error('[Global Error]', { message, source, lineno, colno, error });
+  return false;
+};
+
+window.onunhandledrejection = (event) => {
+  console.error('[Unhandled Promise Rejection]', event.reason);
+};
+
+// 渲染应用
+try {
+  console.log('[CCGUI] Initializing React app...');
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+  console.log('[CCGUI] React app mounted');
+} catch (error) {
+  console.error('[CCGUI] Failed to mount React app:', error);
+  document.getElementById('root')!.innerHTML = `
+    <div style="padding: 20px; color: red;">
+      <h1>Failed to initialize application</h1>
+      <pre>${error instanceof Error ? error.message : String(error)}</pre>
+    </div>
+  `;
+}
