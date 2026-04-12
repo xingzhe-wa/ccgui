@@ -1,6 +1,6 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.xingzhewa.ccgui</id>
+    <id>com.github.claudecode.ccgui</id>
     <name>CC Assistant</name>
     <vendor>xingzhe-wa</vendor>
 
@@ -11,132 +11,162 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- Tool Window (按需创建) -->
         <toolWindow
-            factoryClass="com.github.xingzhewa.ccgui.toolWindow.MyToolWindowFactory"
+            factoryClass="com.github.claudecode.ccgui.toolWindow.MyToolWindowFactory"
             id="CCGUI"
             key="tool.window.name"
             icon="META-INF/icons/ccgui_logo_13x13.png"/>
 
-        <!-- Application Services (延迟加载) - 使用 by lazy 实现按需加载 -->
+        <!-- Application Services (延迟加载) -->
         <applicationService
-            serviceImplementation="com.github.xingzhewa.ccgui.config.CCGuiConfig"/>
+            serviceImplementation="com.github.claudecode.ccgui.config.CCGuiConfig"
+            preload="false"/>
 
         <applicationService
-            serviceImplementation="com.github.xingzhewa.ccgui.bridge.BridgeManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.bridge.BridgeManager"
+            preload="false"/>
 
         <!-- SDK Services (Phase 2.5) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.ClaudeCodeClient"/>
+            serviceImplementation="com.github.claudecode.ccgui.adaptation.sdk.ClaudeCodeClient"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.SdkSessionManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.adaptation.sdk.SdkSessionManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.adaptation.sdk.SdkPermissionHandler"/>
+            serviceImplementation="com.github.claudecode.ccgui.adaptation.sdk.SdkPermissionHandler"
+            preload="false"/>
 
         <!-- Core Services (Phase 3) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.orchestrator.ChatOrchestrator"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.orchestrator.ChatOrchestrator"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.context.ContextManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.context.ContextManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.session.SessionManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.session.SessionService"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.streaming.StreamingOutputEngine"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.streaming.StreamingOutputEngine"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.config.ConfigManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.config.ConfigService"
+            preload="false"/>
 
         <!-- Feature Services (Phase 4) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.interaction.InteractiveRequestEngine"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.interaction.InteractiveRequestEngine"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.prompt.PromptOptimizer"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.prompt.PromptOptimizer"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.multimodal.MultimodalInputHandler"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.multimodal.MultimodalInputHandler"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.task.TaskProgressTracker"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.task.TaskProgressTracker"
+            preload="false"/>
 
         <!-- Ecosystem Services (Phase 5) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.skill.SkillsManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.skill.SkillsManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.skill.SkillExecutor"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.skill.SkillExecutor"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.agent.AgentsManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.agent.AgentsManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.agent.AgentExecutor"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.agent.AgentExecutor"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.mcp.McpServerManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.mcp.McpServerManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.mcp.ScopeManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.mcp.ScopeManager"
+            preload="false"/>
 
         <!-- Infrastructure Services (PersistentStateComponent) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.ConfigStorage"/>
+            serviceImplementation="com.github.claudecode.ccgui.infrastructure.storage.ConfigStorage"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.SecureStorage"/>
+            serviceImplementation="com.github.claudecode.ccgui.infrastructure.storage.SecureStorage"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.SessionStorage"/>
+            serviceImplementation="com.github.claudecode.ccgui.infrastructure.storage.SessionStorage"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.infrastructure.storage.StorageService"/>
+            serviceImplementation="com.github.claudecode.ccgui.infrastructure.storage.StorageService"
+            preload="false"/>
 
         <!-- Feature Services (Phase 4+) - 延迟加载 -->
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.usage.UsageService"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.usage.UsageService"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.hook.HookManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.hook.HookManager"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.commit.CommitService"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.commit.CommitService"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.slash.command.SlashCommandRegistry"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.slash.command.SlashCommandRegistry"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.util.I18nService"/>
+            serviceImplementation="com.github.claudecode.ccgui.util.I18nService"
+            preload="false"/>
         <projectService
-            serviceImplementation="com.github.xingzhewa.ccgui.application.config.LocaleConfigManager"/>
+            serviceImplementation="com.github.claudecode.ccgui.application.config.LocaleConfigManager"
+            preload="false"/>
 
         <!-- Startup (按需执行) -->
         <postStartupActivity
-            implementation="com.github.xingzhewa.ccgui.startup.MyProjectActivity"/>
+            implementation="com.github.claudecode.ccgui.startup.MyProjectActivity"/>
     </extensions>
 
     <!-- Actions -->
     <actions>
         <action
             id="CCGUI.CodeExplain"
-            class="com.github.xingzhewa.ccgui.action.CodeExplainAction"
+            class="com.github.claudecode.ccgui.action.CodeExplainAction"
             key="action.code.explain">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.CodeOptimize"
-            class="com.github.xingzhewa.ccgui.action.CodeOptimizeAction"
+            class="com.github.claudecode.ccgui.action.CodeOptimizeAction"
             key="action.code.optimize">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.CodeComment"
-            class="com.github.xingzhewa.ccgui.action.CodeCommentAction"
+            class="com.github.claudecode.ccgui.action.CodeCommentAction"
             key="action.code.comment">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.CodeTest"
-            class="com.github.xingzhewa.ccgui.action.CodeTestAction"
+            class="com.github.claudecode.ccgui.action.CodeTestAction"
             key="action.code.test">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.CodeRefactor"
-            class="com.github.xingzhewa.ccgui.action.CodeRefactorAction"
+            class="com.github.claudecode.ccgui.action.CodeRefactorAction"
             key="action.code.refactor">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.CodeBug"
-            class="com.github.xingzhewa.ccgui.action.CodeBugAction"
+            class="com.github.claudecode.ccgui.action.CodeBugAction"
             key="action.code.bug">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
         <action
             id="CCGUI.AddToChat"
-            class="com.github.xingzhewa.ccgui.action.AddToChatAction"
+            class="com.github.claudecode.ccgui.action.AddToChatAction"
             key="action.add.to.chat">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>

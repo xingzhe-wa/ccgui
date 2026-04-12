@@ -6,6 +6,7 @@
  */
 
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { javaBridge } from '@/lib/java-bridge';
 import { useChatConfigStore } from '@/shared/stores/chatConfigStore';
 import { cn } from '@/shared/utils/cn';
@@ -14,76 +15,51 @@ export interface SlashCommand {
   command: string;
   description: string;
   icon?: string;
-  action: () => void | Promise<void>;
 }
+
+/**
+ * 需要导航的路由命令
+ */
+const NAV_ROUTES: Record<string, string> = {
+  '/model': '/settings?tab=model',
+  '/session': '/history'
+};
 
 const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     command: '/compact',
     description: '压缩上下文，减少 token 消耗',
-    icon: '🗜️',
-    action: async () => {
-      await javaBridge.executeSlashCommand('/compact');
-    }
+    icon: '🗜️'
   },
   {
     command: '/clear',
     description: '清空当前会话的所有消息',
-    icon: '🗑️',
-    action: async () => {
-      await javaBridge.executeSlashCommand('/clear');
-      // 清空前端消息列表
-      window.location.reload();
-    }
+    icon: '🗑️'
   },
   {
     command: '/retry',
     description: '重试上一条 AI 回复',
-    icon: '🔄',
-    action: async () => {
-      await javaBridge.executeSlashCommand('/retry');
-    }
+    icon: '🔄'
   },
   {
     command: '/export',
     description: '导出会话内容',
-    icon: '📤',
-    action: async () => {
-      const result = await javaBridge.executeSlashCommand('/export');
-      if (result.success) {
-        console.log('[SlashCommandPalette] Export result:', result);
-      }
-    }
+    icon: '📤'
   },
   {
     command: '/model',
     description: '切换 AI 模型',
-    icon: '🤖',
-    action: () => {
-      // 切换到模型选择页面
-      window.location.hash = '/settings?tab=model';
-    }
+    icon: '🤖'
   },
   {
     command: '/mode',
     description: '切换对话模式 (thinking/plan/auto)',
-    icon: '🧠',
-    action: () => {
-      const modeStore = useChatConfigStore.getState();
-      const currentMode = modeStore.conversationMode as string || 'AUTO';
-      const modeOrder = ['AUTO', 'THINKING', 'PLANNING'];
-      const idx = modeOrder.indexOf(currentMode);
-      const next = modeOrder[(idx + 1) % 3] as 'AUTO' | 'THINKING' | 'PLANNING';
-      modeStore.setConversationMode(next);
-    }
+    icon: '🧠'
   },
   {
     command: '/session',
     description: '查看会话历史',
-    icon: '💬',
-    action: () => {
-      window.location.hash = '/history';
-    }
+    icon: '💬'
   }
 ];
 
@@ -100,6 +76,7 @@ export const SlashCommandPalette = memo<SlashCommandPaletteProps>(function Slash
   onClose,
   className
 }) {
+  const navigate = useNavigate();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const itemHeight = 36; // 每个命令项的高度
@@ -108,6 +85,49 @@ export const SlashCommandPalette = memo<SlashCommandPaletteProps>(function Slash
   const filteredCommands = DEFAULT_COMMANDS.filter(cmd =>
     cmd.command.toLowerCase().includes(filter.toLowerCase())
   );
+
+  /**
+   * 执行命令逻辑
+   * 统一使用 React Router 的 navigate 进行路由跳转
+   */
+  const executeCommand = useCallback(async (cmd: SlashCommand) => {
+    // 路由导航命令
+    const navPath = NAV_ROUTES[cmd.command];
+    if (navPath) {
+      navigate(navPath);
+      return;
+    }
+
+    // 状态更新命令
+    if (cmd.command === '/mode') {
+      const modeStore = useChatConfigStore.getState();
+      const currentMode = modeStore.conversationMode as string || 'AUTO';
+      const modeOrder = ['AUTO', 'THINKING', 'PLANNING'];
+      const idx = modeOrder.indexOf(currentMode);
+      const next = modeOrder[(idx + 1) % 3] as 'AUTO' | 'THINKING' | 'PLANNING';
+      modeStore.setConversationMode(next);
+      return;
+    }
+
+    // Slash 命令执行
+    switch (cmd.command) {
+      case '/compact':
+      case '/retry':
+        await javaBridge.executeSlashCommand(cmd.command);
+        break;
+      case '/clear':
+        await javaBridge.executeSlashCommand('/clear');
+        window.location.reload();
+        break;
+      case '/export': {
+        const result = await javaBridge.executeSlashCommand('/export');
+        if (result.success) {
+          console.log('[SlashCommandPalette] Export result:', result);
+        }
+        break;
+      }
+    }
+  }, [navigate]);
 
   // 监听键盘事件
   useEffect(() => {
@@ -159,9 +179,9 @@ export const SlashCommandPalette = memo<SlashCommandPaletteProps>(function Slash
   }, [selectedIndex]);
 
   const handleSelect = useCallback((cmd: SlashCommand) => {
-    cmd.action();
+    executeCommand(cmd);
     onSelect(cmd.command);
-  }, [onSelect]);
+  }, [executeCommand, onSelect]);
 
   if (filteredCommands.length === 0) {
     return (
