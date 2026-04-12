@@ -46,8 +46,7 @@ export const MessageList = memo<MessageListProps>(function MessageList({
     getScrollElement: () => parentRef.current,
     estimateSize: () => ESTIMATED_MESSAGE_HEIGHT,
     overscan: OVERSCAN,
-    // 禁用默认的 measure 方法，手动控制
-    measureElement: undefined
+    measureElement: (element) => element?.getBoundingClientRect().height ?? ESTIMATED_MESSAGE_HEIGHT
   });
 
   // 检查用户是否在主动滚动（通过监听 scroll 事件）
@@ -105,6 +104,11 @@ export const MessageList = memo<MessageListProps>(function MessageList({
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  // 内容变化时重新测量
+  useEffect(() => {
+    virtualizer.measure?.();
+  }, [messages, virtualizer.measure]);
+
   const items = virtualizer.getVirtualItems();
 
   if (messages.length === 0) {
@@ -135,7 +139,6 @@ export const MessageList = memo<MessageListProps>(function MessageList({
     <div
       ref={parentRef}
       className={cn('h-full overflow-y-auto', className)}
-      style={{ contain: 'strict' }}
     >
       <div
         style={{
