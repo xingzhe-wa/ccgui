@@ -46,8 +46,12 @@ export const MessageList = memo<MessageListProps>(function MessageList({
     getScrollElement: () => parentRef.current,
     estimateSize: () => ESTIMATED_MESSAGE_HEIGHT,
     overscan: OVERSCAN,
-    measureElement: (element) => element?.getBoundingClientRect().height ?? ESTIMATED_MESSAGE_HEIGHT
+    measureElement: (element) => element?.getBoundingClientRect().height ?? ESTIMATED_MESSAGE_HEIGHT // Enable dynamic measurement for JCEF compatibility
   });
+
+  // Use ref pattern to avoid excessive re-renders since useVirtualizer returns a new object on every render
+  const virtualizerRef = useRef(virtualizer);
+  virtualizerRef.current = virtualizer;
 
   // 检查用户是否在主动滚动（通过监听 scroll 事件）
   const handleScroll = useCallback(() => {
@@ -105,9 +109,10 @@ export const MessageList = memo<MessageListProps>(function MessageList({
   }, [handleScroll]);
 
   // 内容变化时重新测量
+  // Note: Streaming content is tracked through individual message `isStreaming` properties in the messages array
   useEffect(() => {
-    virtualizer.measure?.();
-  }, [messages, virtualizer.measure]);
+    virtualizerRef.current.measure?.();
+  }, [messages]);
 
   const items = virtualizer.getVirtualItems();
 
