@@ -301,7 +301,7 @@ class McpServerManager(private val project: Project) : Disposable {
             updateServer(connectedServer)
 
             log.info("MCP server started: $serverId")
-            EventBus.publish(McpServerConnectedEvent(serverId, server.capabilities))
+            EventBus.publish(McpServerConnectedEvent(serverId, server.capabilities), project)
 
             true
         } catch (e: Exception) {
@@ -336,7 +336,7 @@ class McpServerManager(private val project: Project) : Disposable {
             val server = servers[serverId]
             if (server != null) {
                 updateServer(server.withDisconnected())
-                EventBus.publish(McpServerDisconnectedEvent(serverId, null))
+                EventBus.publish(McpServerDisconnectedEvent(serverId, null), project)
             }
 
             log.info("MCP server stopped: $serverId")

@@ -97,7 +97,7 @@ class SdkPermissionHandler(private val project: Project) {
             toolName = toolName,
             description = description,
             question = question
-        ))
+        ), project)
 
         log.info("Permission request for $toolName: showing to user (requestId=$requestId)")
 

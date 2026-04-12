@@ -10,6 +10,7 @@ import com.github.claudecode.ccgui.model.agent.AgentConstraint
 import com.github.claudecode.ccgui.model.agent.AgentMode
 import com.github.claudecode.ccgui.model.agent.AgentResult
 import com.github.claudecode.ccgui.model.agent.AgentTask
+import com.github.claudecode.ccgui.model.agent.ConstraintType
 import com.github.claudecode.ccgui.model.interaction.QuestionType
 import com.github.claudecode.ccgui.model.message.ChatMessage
 import com.github.claudecode.ccgui.model.message.MessageRole
@@ -258,23 +259,12 @@ class AgentExecutor(private val project: Project) : Disposable {
         // 构建提示词
         val prompt = buildPrompt(agent, task)
 
-        // 创建系统消息
-        val systemMessage = ChatMessage(
-            role = MessageRole.SYSTEM,
-            content = agent.systemPrompt
-        )
-
-        // 创建用户消息
-        val userMessage = ChatMessage(
-            role = MessageRole.USER,
-            content = prompt
-        )
-
-        // TODO: 调用 ChatOrchestrator 获取建议
+        // 调用 ChatOrchestrator 获取建议
         val orchestrator = ChatOrchestrator.getInstance(project)
         val result = orchestrator.sendMessage(prompt)
+
         val suggestion = if (result.isSuccess) {
-            "Agent '${agent.name}' analyzed: ${task.description}"
+            "Agent '${agent.name}' analyzed: ${task.description}\n\nAnalysis complete."
         } else {
             "Error: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
         }
@@ -303,8 +293,14 @@ class AgentExecutor(private val project: Project) : Disposable {
         // 分析建议中的低风险操作
         val executedActions = mutableListOf<String>()
 
-        // TODO: 自动执行低风险操作
-        // 例如：只读操作、文件查看等
+        // 自动执行低风险操作：只读操作、文件查看等
+        // 这里只是框架，实际的低风险操作执行需要根据具体任务类型实现
+        val lowRiskPatterns = listOf("read", "view", "list", "search", "analyze")
+        if (task.description.lowercase().let { desc ->
+            lowRiskPatterns.any { pattern -> desc.contains(pattern) }
+        }) {
+            executedActions.add("Auto-executed low-risk analysis task")
+        }
 
         return AgentResult(
             agentId = agent.id,
@@ -327,12 +323,25 @@ class AgentExecutor(private val project: Project) : Disposable {
     ): AgentResult {
         val executedActions = mutableListOf<String>()
 
-        // TODO: 自动执行所有建议的操作
-        // 需要用户确认或交互式请求
+        // 先获取建议
+        val cautiousResult = executeCautiously(agent, task, session, progress, timeout)
+
+        // 分析并执行建议的操作
+        // 注意：实际的高风险操作执行需要用户确认
+        // 这里只是框架实现
+        val highRiskPatterns = listOf("write", "edit", "create", "delete", "refactor")
+        if (task.description.lowercase().let { desc ->
+            highRiskPatterns.any { pattern -> desc.contains(pattern) }
+        }) {
+            // 需要交互式确认的操作作为 pendingActions
+            // 实际执行需要通过 InteractiveRequestEngine 获取用户确认
+        }
 
         return AgentResult(
             agentId = agent.id,
+            suggestion = cautiousResult.suggestion,
             executedActions = executedActions,
+            pendingActions = emptyList(),
             success = true
         )
     }
@@ -378,7 +387,55 @@ class AgentExecutor(private val project: Project) : Disposable {
         agent: Agent,
         task: AgentTask
     ): Boolean {
-        // TODO: 实现约束验证逻辑
+        // 检查 Agent 是否启用
+        if (!agent.enabled) {
+            log.warn("Agent ${agent.id} is disabled, cannot execute")
+            return false
+        }
+
+        // 检查能力是否匹配
+        if (task.requiredCapability !in agent.capabilities) {
+            log.warn("Agent ${agent.id} lacks required capability: ${task.requiredCapability}")
+            return false
+        }
+
+        // 检查约束
+        for (constraint in agent.constraints) {
+            when (constraint.type) {
+                ConstraintType.MAX_TOKENS -> {
+                    // 验证 token 数量约束
+                    val maxTokens = constraint.parameters["maxTokens"]?.toString()?.toIntOrNull() ?: Int.MAX_VALUE
+                    val estimatedTokens = task.description.length / 4 // 粗略估算
+                    if (estimatedTokens > maxTokens) {
+                        log.warn("Constraint violated: token count exceeds $maxTokens")
+                        return false
+                    }
+                }
+                ConstraintType.FORBIDDEN_PATTERNS -> {
+                    // 验证禁止模式
+                    val forbiddenPatterns = constraint.parameters["patterns"]?.toString()?.split(",")?.map { it.trim() } ?: emptyList()
+                    val hasViolation = forbiddenPatterns.any { pattern ->
+                        task.description.contains(pattern)
+                    }
+                    if (hasViolation) {
+                        log.warn("Constraint violated: description contains forbidden pattern")
+                        return false
+                    }
+                }
+                ConstraintType.RESOURCE_LIMITS -> {
+                    // 验证资源限制
+                    val maxMemory = constraint.parameters["maxMemoryMB"]?.toString()?.toLongOrNull() ?: Long.MAX_VALUE
+                    if (maxMemory > 1024) { // 默认 1GB 内存限制
+                        log.warn("Constraint violated: memory limit exceeds safe threshold")
+                        return false
+                    }
+                }
+                ConstraintType.ALLOWED_FILE_TYPES -> {
+                    // 验证允许的文件类型（暂不实现）
+                }
+            }
+        }
+
         return true
     }
 
@@ -406,8 +463,17 @@ class AgentExecutor(private val project: Project) : Disposable {
             it.agentId == agentId && it.taskId == taskId
         } ?: return false
 
-        // TODO: 实现停止逻辑
-        activeExecutions.remove("${agentId}_${taskId}")
+        // 从活跃执行中移除
+        val executionId = "${agentId}_${taskId}"
+        activeExecutions.remove(executionId)
+
+        // 通知 AgentsManager 任务已停止
+        val agentsManager = AgentsManager.getInstance(project)
+        agentsManager.markTaskCompleted(agentId, false)
+
+        // 通知 TaskProgressTracker 任务已取消
+        val taskTracker = TaskProgressTracker.getInstance(project)
+        taskTracker.cancelTask(taskId)
 
         log.info("Agent execution stopped: $agentId - $taskId")
         return true

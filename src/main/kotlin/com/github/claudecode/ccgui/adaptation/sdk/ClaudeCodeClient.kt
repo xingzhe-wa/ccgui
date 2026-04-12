@@ -181,7 +181,7 @@ class ClaudeCodeClient(private val project: Project) : Disposable {
                             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
                         )
                         listener?.onInit(parsed)
-                        EventBus.publish(SdkSessionInitEvent(parsed.sessionId, parsed.tools))
+                        EventBus.publish(SdkSessionInitEvent(parsed.sessionId, parsed.tools), project)
                     }
                     is SdkAssistantMessage -> {
                         listener?.onAssistant(parsed)

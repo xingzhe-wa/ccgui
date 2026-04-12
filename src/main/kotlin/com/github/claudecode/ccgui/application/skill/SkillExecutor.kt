@@ -121,7 +121,7 @@ class SkillExecutor(private val project: Project) : Disposable {
             recordExecution(skill.id, result.isSuccess, executionTime)
 
             // 8. 发布事件
-            EventBus.publish(SkillExecutedEvent(skill.id, result.isSuccess, executionTime))
+            EventBus.publish(SkillExecutedEvent(skill.id, result.isSuccess, executionTime), project)
 
             val responseText = if (result.isSuccess) "Skill '${skill.name}' executed successfully"
                                else result.exceptionOrNull()?.message ?: "Unknown error"
@@ -141,7 +141,7 @@ class SkillExecutor(private val project: Project) : Disposable {
             recordExecution(skill.id, false, executionTime)
 
             // 发布事件
-            EventBus.publish(SkillExecutedEvent(skill.id, false, executionTime))
+            EventBus.publish(SkillExecutedEvent(skill.id, false, executionTime), project)
 
             log.error("Skill execution failed: ${skill.id}", e)
             SkillResult(

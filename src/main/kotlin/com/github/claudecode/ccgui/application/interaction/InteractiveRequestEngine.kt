@@ -116,7 +116,7 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
             pendingQuestions[question.questionId] = pendingQuestion
             _activeQuestionId.value = question.questionId
             updateQuestionQueue()
-            EventBus.publish(InteractiveQuestionEvent(question))
+            EventBus.publish(InteractiveQuestionEvent(question), project)
             log.info("Question created: ${question.questionId}, type=${question.questionType}")
         }
 
@@ -240,7 +240,7 @@ class InteractiveRequestEngine(private val project: Project) : Disposable {
             }
 
             log.info("Answer submitted: questionId=$questionId")
-            EventBus.publish(QuestionAnsweredEvent(questionId, validatedAnswer))
+            EventBus.publish(QuestionAnsweredEvent(questionId, validatedAnswer), project)
         }
     }
 

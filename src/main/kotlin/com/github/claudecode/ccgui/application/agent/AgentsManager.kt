@@ -528,7 +528,7 @@ class AgentsManager(private val project: Project) : Disposable {
         _activeTasks.value = currentTasks
 
         log.info("Agent task started: $agentId - $taskId")
-        EventBus.publish(AgentStartedEvent(agentId, taskId))
+        EventBus.publish(AgentStartedEvent(agentId, taskId), project)
     }
 
     /**
@@ -543,7 +543,7 @@ class AgentsManager(private val project: Project) : Disposable {
         _activeTasks.value = currentTasks
 
         log.info("Agent task completed: $agentId - success=$success")
-        EventBus.publish(AgentCompletedEvent(agentId, "", success))
+        EventBus.publish(AgentCompletedEvent(agentId, "", success), project)
     }
 
     // ==================== 内部方法 ====================

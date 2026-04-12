@@ -71,7 +71,7 @@ class SessionService(private val project: Project) : Disposable {
         _sessions.value = sessionStorage.getAllSessions()
         setCurrentSession(session.id)
 
-        EventBus.publish(SessionCreatedEvent(session.id, session.name))
+        EventBus.publish(SessionCreatedEvent(session.id, session.name), project)
         log.info("Created session: ${session.id}")
         return session
     }
@@ -109,7 +109,7 @@ class SessionService(private val project: Project) : Disposable {
             sessionStorage.getSession(it)?.let { session ->
                 sessionStorage.updateSession(session.withActivated())
             }
-            EventBus.publish(SessionSwitchedEvent(it))
+            EventBus.publish(SessionSwitchedEvent(it), project)
         }
 
         _sessions.value = sessionStorage.getAllSessions()
@@ -131,7 +131,7 @@ class SessionService(private val project: Project) : Disposable {
         }
 
         _sessions.value = sessionStorage.getAllSessions()
-        EventBus.publish(SessionDeletedEvent(sessionId))
+        EventBus.publish(SessionDeletedEvent(sessionId), project)
         log.info("Deleted session: $sessionId")
     }
 
@@ -169,7 +169,7 @@ class SessionService(private val project: Project) : Disposable {
 
             // 如果是待确认会话已确认，发布事件
             if (session.isPending) {
-                EventBus.publish(SessionConfirmedEvent(sessionId))
+                EventBus.publish(SessionConfirmedEvent(sessionId), project)
                 log.info("Session confirmed after first message: $sessionId")
             }
             true
@@ -186,7 +186,7 @@ class SessionService(private val project: Project) : Disposable {
 
         sessionStorage.updateSession(session.withConfirmed())
         _sessions.value = sessionStorage.getAllSessions()
-        EventBus.publish(SessionConfirmedEvent(sessionId))
+        EventBus.publish(SessionConfirmedEvent(sessionId), project)
         log.info("Session manually confirmed: $sessionId")
         return true
     }

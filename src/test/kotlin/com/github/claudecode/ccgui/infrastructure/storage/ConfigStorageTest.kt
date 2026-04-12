@@ -5,11 +5,6 @@ import com.github.claudecode.ccgui.model.config.ModelConfig
 import com.github.claudecode.ccgui.model.config.ThemeConfig
 import com.github.claudecode.ccgui.util.JsonUtils
 import com.intellij.testFramework.LightPlatformTestCase
-import org.junit.Before
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * ConfigStorage 单元测试
@@ -18,51 +13,44 @@ class ConfigStorageTest : LightPlatformTestCase() {
 
     private lateinit var configStorage: ConfigStorage
 
-    @Before
     override fun setUp() {
         super.setUp()
         configStorage = ConfigStorage.getInstance(project)
     }
 
-    @Test
-    fun `test getState - should return null for non-existent key`() {
+    fun testGetStateShouldReturnNullForNonExistentKey() {
         val result = configStorage.getState("non.existent.key")
         assertNull(result)
     }
 
-    @Test
-    fun `test setState and getState - should persist value`() {
+    fun testSetStateAndGetStateShouldPersistValue() {
         configStorage.setState("test.key", "test.value")
         val result = configStorage.getState("test.key")
         assertEquals("test.value", result)
     }
 
-    @Test
-    fun `test setState - should overwrite existing value`() {
+    fun testSetStateShouldOverwriteExistingValue() {
         configStorage.setState("test.key", "value1")
         configStorage.setState("test.key", "value2")
         val result = configStorage.getState("test.key")
         assertEquals("value2", result)
     }
 
-    @Test
-    fun `test removeState - should remove key`() {
+    fun testRemoveStateShouldRemoveKey() {
         configStorage.setState("test.key", "test.value")
         configStorage.removeState("test.key")
         val result = configStorage.getState("test.key")
         assertNull(result)
     }
 
-    @Test
-    fun `test appConfig - should return default config`() {
+    fun testAppConfigShouldReturnDefaultConfig() {
         val appConfig = configStorage.appConfig
         assertNotNull(appConfig)
         assertNotNull(appConfig.modelConfig)
         assertTrue(appConfig.providerProfiles.isNotEmpty())
     }
 
-    @Test
-    fun `test saveAppConfig - should persist config`() {
+    fun testSaveAppConfigShouldPersistConfig() {
         val newConfig = AppConfig(
             modelConfig = ModelConfig(
                 provider = "test-provider",
@@ -76,27 +64,23 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertEquals("test-model", loaded.modelConfig.model)
     }
 
-    @Test
-    fun `test currentThemeId - should default to jetbrains-dark`() {
+    fun testCurrentThemeIdShouldDefaultToJetbrainsDark() {
         assertEquals("jetbrains-dark", configStorage.currentThemeId)
     }
 
-    @Test
-    fun `test setCurrentThemeId - should update theme`() {
+    fun testSetCurrentThemeIdShouldUpdateTheme() {
         configStorage.currentThemeId = "test-theme"
         assertEquals("test-theme", configStorage.currentThemeId)
     }
 
-    @Test
-    fun `test themes - should return preset themes`() {
+    fun testThemesShouldReturnPresetThemes() {
         val themes = configStorage.themes
         assertTrue(themes.isNotEmpty())
         assertTrue(themes.any { it.id == "jetbrains-dark" })
         assertTrue(themes.any { it.id == "jetbrains-light" })
     }
 
-    @Test
-    fun `test addCustomTheme - should add to custom themes`() {
+    fun testAddCustomThemeShouldAddToCustomThemes() {
         val customTheme = ThemeConfig(
             id = "test-custom",
             name = "Test Custom",
@@ -109,8 +93,7 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertTrue(customThemes.any { it.id == "test-custom" })
     }
 
-    @Test
-    fun `test deleteCustomTheme - should remove from custom themes`() {
+    fun testDeleteCustomThemeShouldRemoveFromCustomThemes() {
         val customTheme = ThemeConfig(
             id = "test-custom",
             name = "Test Custom",
@@ -124,8 +107,7 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertTrue(customThemes.none { it.id == "test-custom" })
     }
 
-    @Test
-    fun `test resetToDefaults - should reset all configs`() {
+    fun testResetToDefaultsShouldResetAllConfigs() {
         // 修改一些配置
         configStorage.currentThemeId = "custom-theme"
         configStorage.addCustomTheme(
@@ -140,8 +122,7 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertTrue(configStorage.customThemes.isEmpty())
     }
 
-    @Test
-    fun `test extraData - should persist custom key-value pairs`() {
+    fun testExtraDataShouldPersistCustomKeyValuePairs() {
         configStorage.setState("custom.test.key", "custom.test.value")
         configStorage.setState("custom.test.number", "123")
 
@@ -149,30 +130,26 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertEquals("123", configStorage.getState("custom.test.number"))
     }
 
-    @Test
-    fun `test extraData - should handle special characters`() {
+    fun testExtraDataShouldHandleSpecialCharacters() {
         val specialValue = "value with \"quotes\" and 'apostrophes'"
         configStorage.setState("special.key", specialValue)
 
         assertEquals(specialValue, configStorage.getState("special.key"))
     }
 
-    @Test
-    fun `test extraData - should handle unicode characters`() {
+    fun testExtraDataShouldHandleUnicodeCharacters() {
         val unicodeValue = "测试中文 🎉"
         configStorage.setState("unicode.key", unicodeValue)
 
         assertEquals(unicodeValue, configStorage.getState("unicode.key"))
     }
 
-    @Test
-    fun `test extraData - should handle empty values`() {
+    fun testExtraDataShouldHandleEmptyValues() {
         configStorage.setState("empty.key", "")
         assertEquals("", configStorage.getState("empty.key"))
     }
 
-    @Test
-    fun `test getAllThemes - should include custom themes`() {
+    fun testGetAllThemesShouldIncludeCustomThemes() {
         val customTheme = ThemeConfig(
             id = "test-custom",
             name = "Test Custom",
@@ -186,15 +163,13 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertTrue(allThemes.any { it.id == "jetbrains-dark" })
     }
 
-    @Test
-    fun `test getCurrentTheme - should return valid theme`() {
+    fun testGetCurrentThemeShouldReturnValidTheme() {
         val theme = configStorage.getCurrentTheme()
         assertNotNull(theme)
         assertEquals("jetbrains-dark", theme.id)
     }
 
-    @Test
-    fun `test getCurrentTheme - should return custom theme when set`() {
+    fun testGetCurrentThemeShouldReturnCustomThemeWhenSet() {
         val customTheme = ThemeConfig(
             id = "my-custom",
             name = "My Custom",
@@ -208,8 +183,7 @@ class ConfigStorageTest : LightPlatformTestCase() {
         assertEquals("my-custom", theme.id)
     }
 
-    @Test
-    fun `test state persistence - should survive component reload`() {
+    fun testStatePersistenceShouldSurviveComponentReload() {
         // 设置状态
         configStorage.setState("persist.test", "persist.value")
 

@@ -12,13 +12,8 @@ import com.github.claudecode.ccgui.model.session.SessionType
 import com.intellij.testFramework.LightPlatformTestCase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * 会话管理集成测试
@@ -30,16 +25,14 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
     private lateinit var sessionManager: SessionService
     private lateinit var contextManager: ContextManager
 
-    @Before
     override fun setUp() {
         super.setUp()
+        EventBus.init(project)
         sessionManager = SessionService.getInstance(project)
         contextManager = ContextManager.getInstance(project)
     }
 
-    @After
     override fun tearDown() {
-        super.tearDown()
         // 清理测试创建的会话
         val sessions = sessionManager.getHistorySessions()
         sessions.forEach { session ->
@@ -47,9 +40,9 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
                 sessionManager.deleteSession(session.id)
             }
         }
+        super.tearDown()
     }
 
-    @org.junit.Test
     fun testCreateSessionFlowShouldCreateAndPersistSession() {
         runBlocking {
             // 1. 创建会话
@@ -70,7 +63,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         }
     }
 
-    @org.junit.Test
     fun testAddMessageFlowShouldAddMessageToSession() = runBlocking {
         val session = sessionManager.createSession("Test Message Session", SessionType.PROJECT)
 
@@ -86,12 +78,11 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals(MessageRole.USER, loadedSession?.messages?.firstOrNull()?.role)
     }
 
-    @org.junit.Test
     fun testSessionEventsShouldPublishCorrectEvents() = runBlocking {
-        val latch = java.util.concurrent.CountDownLatch(2)
+        val latch = CountDownLatch(2)
         val events = mutableListOf<Any>()
 
-        val subscriptionId = EventBus.subscribe { event ->
+        val subscriptionId = EventBus.subscribeAll(project) { event ->
             events.add(event)
             latch.countDown()
         }
@@ -105,7 +96,7 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
             sessionManager.addMessage(session.id, message)
 
             // 等待事件
-            assertTrue(latch.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(latch.await(2, TimeUnit.SECONDS))
 
             // 验证事件
             assertTrue(events.any { it is SessionCreatedEvent })
@@ -117,11 +108,10 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
             val messageEvent = events.filterIsInstance<MessageAddedEvent>().firstOrNull()
             assertEquals(session.id, messageEvent?.sessionId)
         } finally {
-            subscriptionId?.let { EventBus.unsubscribe(it) }
+            subscriptionId.let { EventBus.unsubscribe(project, it) }
         }
     }
 
-    @org.junit.Test
     fun testContextTrackingShouldTrackContextLengthCorrectly() = runBlocking {
         val session = sessionManager.createSession("Context Test Session", SessionType.PROJECT)
 
@@ -136,7 +126,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals(121, contextManager.getContextLength(session.id))
     }
 
-    @org.junit.Test
     fun testContextCompactionShouldTriggerWhenThresholdReached() = runBlocking {
         val session = sessionManager.createSession("Compaction Test Session", SessionType.PROJECT)
 
@@ -153,7 +142,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertFalse(shouldCompact)
     }
 
-    @org.junit.Test
     fun testSessionSwitchingShouldSwitchActiveSession() = runBlocking {
         val session1 = sessionManager.createSession("Session 1", SessionType.PROJECT)
         val session2 = sessionManager.createSession("Session 2", SessionType.PROJECT)
@@ -168,21 +156,18 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals(session1.id, switchedSession?.id)
 
         // 验证事件发布
-        val latch = java.util.concurrent.CountDownLatch(1)
-        val subscriptionId = EventBus.subscribe { event ->
-            if (event is com.github.claudecode.ccgui.infrastructure.eventbus.SessionSwitchedEvent) {
-                latch.countDown()
-            }
+        val latch = CountDownLatch(1)
+        val subscriptionId = EventBus.subscribe(project, com.github.claudecode.ccgui.infrastructure.eventbus.SessionSwitchedEvent::class.java) { event ->
+            latch.countDown()
         }
 
         try {
-            assertTrue(latch.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(latch.await(2, TimeUnit.SECONDS))
         } finally {
-            subscriptionId?.let { EventBus.unsubscribe(it) }
+            subscriptionId.let { EventBus.unsubscribe(project, it) }
         }
     }
 
-    @org.junit.Test
     fun testMessageRolesShouldPreserveRoleInformation() = runBlocking {
         val session = sessionManager.createSession("Role Test Session", SessionType.PROJECT)
 
@@ -198,13 +183,12 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertNotNull(loadedSession)
         assertEquals(3, loadedSession?.messages?.size)
 
-        val messages = loadedSession?.messages!!
+        val messages = loadedSession!!.messages
         assertEquals(MessageRole.USER, messages[0].role)
         assertEquals(MessageRole.ASSISTANT, messages[1].role)
         assertEquals(MessageRole.SYSTEM, messages[2].role)
     }
 
-    @org.junit.Test
     fun testSessionDeletionShouldRemoveSessionAndCleanup() = runBlocking {
         val session = sessionManager.createSession("Delete Test Session", SessionType.PROJECT)
 
@@ -226,7 +210,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals(0, contextManager.getContextLength(sessionId))
     }
 
-    @org.junit.Test
     fun testSessionPersistenceShouldSurviveServiceReload() = runBlocking {
         val session = sessionManager.createSession("Persistence Test Session", SessionType.PROJECT)
         val sessionId = session.id
@@ -239,7 +222,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals("Persistence Test Session", loadedSession!!.name)
     }
 
-    @org.junit.Test
     fun testConcurrentMessageAdditionShouldHandleSafely() = runBlocking {
         val session = sessionManager.createSession("Concurrent Test Session", SessionType.PROJECT)
 
@@ -247,7 +229,9 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
             Thread {
                 repeat(10) {
                     val message = ChatMessage.userMessage("Message $threadId-$it")
-                    sessionManager.addMessage(session.id, message)
+                    kotlinx.coroutines.runBlocking {
+                        sessionManager.addMessage(session.id, message)
+                    }
                 }
             }
         }
@@ -261,7 +245,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals(100, loadedSession!!.messages.size)
     }
 
-    @org.junit.Test
     fun testSessionHistoryShouldMaintainOrder() = runBlocking {
         val session = sessionManager.createSession("History Test Session", SessionType.PROJECT)
 
@@ -285,7 +268,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertEquals("Message 3", loadedMessages[2].content)
     }
 
-    @org.junit.Test
     fun testSessionMetadataShouldPreserveMetadata() = runBlocking {
         val session = sessionManager.createSession(
             name = "Metadata Test",
@@ -297,7 +279,6 @@ class SessionManagementIntegrationTest : LightPlatformTestCase() {
         assertTrue(session.createdAt > 0)
     }
 
-    @org.junit.Test
     fun testContextResetShouldClearContextTracking() = runBlocking {
         val session = sessionManager.createSession("Reset Test Session", SessionType.PROJECT)
 

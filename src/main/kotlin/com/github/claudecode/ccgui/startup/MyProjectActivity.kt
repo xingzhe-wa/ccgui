@@ -34,6 +34,9 @@ class MyProjectActivity : ProjectActivity, Disposable {
         currentProject = project
         log.info("CCGUI starting for project: ${project.name}")
 
+        // 初始化 EventBus（建立 MessageBus 连接）
+        EventBus.init(project)
+
         // Initialize default session if none exists
         val sessionManager = SessionService.getInstance(project)
         if (sessionManager.getSessionCount() == 0) {
@@ -51,14 +54,14 @@ class MyProjectActivity : ProjectActivity, Disposable {
         }
 
         // 订阅权限请求事件，将权限请求路由到 InteractiveRequestEngine 显示给用户
-        permissionSubscriptionId = EventBus.subscribeType(PermissionRequestEvent::class.java) { event ->
+        permissionSubscriptionId = EventBus.subscribe(project, PermissionRequestEvent::class.java) { event ->
             scope.launch {
                 handlePermissionRequest(event)
             }
         }
 
         // 订阅交互式问题事件，推送到 JavaScript 前端显示交互面板
-        questionSubscriptionId = EventBus.subscribeType(InteractiveQuestionEvent::class.java) { event ->
+        questionSubscriptionId = EventBus.subscribe(project, InteractiveQuestionEvent::class.java) { event ->
             scope.launch {
                 pushQuestionToJavaScript(event.question)
             }
@@ -113,9 +116,10 @@ class MyProjectActivity : ProjectActivity, Disposable {
     }
 
     override fun dispose() {
+        val project = currentProject
         // 取消 EventBus 订阅，防止内存泄漏
-        permissionSubscriptionId?.let { EventBus.unsubscribe(it) }
-        questionSubscriptionId?.let { EventBus.unsubscribe(it) }
+        permissionSubscriptionId?.let { project?.let { p -> EventBus.unsubscribe(p, it) } }
+        questionSubscriptionId?.let { project?.let { p -> EventBus.unsubscribe(p, it) } }
         scope.cancel()
     }
 }

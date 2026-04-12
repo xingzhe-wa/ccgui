@@ -5,7 +5,10 @@
       "Bash(grep:*)",
       "Bash(grep ^e::*)",
       "Bash(./gradlew compileKotlin --no-daemon)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(./gradlew compileKotlin:*)",
+      "Bash(./gradlew compileTestKotlin:*)",
+      "Bash(cd webview && npm run build 2>&1)"
     ]
   }
 }

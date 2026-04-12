@@ -84,7 +84,7 @@ class TaskProgressTracker(private val project: Project) : Disposable {
         updateAllTasks()
 
         log.info("Task created: ${task.taskId} - ${task.name}")
-        EventBus.publish(TaskStartedEvent(task.taskId, task.name))
+        EventBus.publish(TaskStartedEvent(task.taskId, task.name), project)
 
         return task
     }
@@ -133,7 +133,7 @@ class TaskProgressTracker(private val project: Project) : Disposable {
             activeTasks[taskId] = updatedTask
             updateAllTasks()
 
-            EventBus.publish(TaskProgressEvent(taskId, updatedTask.progress, currentStep))
+            EventBus.publish(TaskProgressEvent(taskId, updatedTask.progress, currentStep), project)
 
             log.debug("Task progress updated: $taskId - $progress%")
         }
@@ -235,7 +235,7 @@ class TaskProgressTracker(private val project: Project) : Disposable {
             updateAllTasks()
 
             log.info("Task completed: $taskId - success=$success")
-            EventBus.publish(TaskCompletedEvent(taskId, success))
+            EventBus.publish(TaskCompletedEvent(taskId, success), project)
         }
     }
 
@@ -261,7 +261,7 @@ class TaskProgressTracker(private val project: Project) : Disposable {
             updateAllTasks()
 
             log.error("Task failed: $taskId - $error")
-            EventBus.publish(TaskCompletedEvent(taskId, false))
+            EventBus.publish(TaskCompletedEvent(taskId, false), project)
         }
     }
 

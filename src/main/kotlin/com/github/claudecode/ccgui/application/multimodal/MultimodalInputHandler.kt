@@ -367,16 +367,35 @@ class MultimodalInputHandler(private val project: Project) {
      */
     private fun getImageDimensions(file: File): Pair<Int?, Int?> {
         return try {
-            // 简化版：只检查常见图片格式
-            // 实际应该使用ImageIO读取
-            when (file.extension.lowercase()) {
-                "png", "jpg", "jpeg" -> {
-                    // TODO: 使用ImageIO读取实际尺寸
-                    null to null
-                }
-                else -> null to null
+            val extension = file.extension.lowercase()
+            if (extension !in listOf("png", "jpg", "jpeg", "gif", "bmp", "webp")) {
+                return null to null
             }
+
+            val imageInputStream = javax.imageio.ImageIO.createImageInputStream(file)
+            if (imageInputStream == null) {
+                return null to null
+            }
+
+            try {
+                val readers = javax.imageio.ImageIO.getImageReaders(imageInputStream)
+                if (readers.hasNext()) {
+                    val reader = readers.next()
+                    try {
+                        reader.input = imageInputStream
+                        val width = reader.getWidth(0)
+                        val height = reader.getHeight(0)
+                        return width to height
+                    } finally {
+                        reader.dispose()
+                    }
+                }
+            } finally {
+                imageInputStream.close()
+            }
+            null to null
         } catch (e: Exception) {
+            log.warn("Failed to read image dimensions: ${e.message}")
             null to null
         }
     }

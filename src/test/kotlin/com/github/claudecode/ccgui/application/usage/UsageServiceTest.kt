@@ -2,12 +2,13 @@ package com.github.claudecode.ccgui.application.usage
 
 import com.github.claudecode.ccgui.application.usage.UsageService.TimePeriod
 import com.intellij.testFramework.LightPlatformTestCase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * UsageService 单元测试
@@ -16,21 +17,18 @@ class UsageServiceTest : LightPlatformTestCase() {
 
     private lateinit var usageService: UsageService
 
-    @Before
     override fun setUp() {
         super.setUp()
         usageService = UsageService.getInstance(project)
         usageService.clearHistory()
     }
 
-    @After
     override fun tearDown() {
-        super.tearDown()
         usageService.clearHistory()
+        super.tearDown()
     }
 
-    @Test
-    fun `test collect - should record usage correctly`() = runBlocking {
+    fun testCollectShouldRecordUsageCorrectly() = runBlocking {
         usageService.collect(
             sessionId = "test-session-1",
             model = "claude-sonnet-4-20250514",
@@ -45,8 +43,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(1, sessionUsage.requestCount)
     }
 
-    @Test
-    fun `test collect - should accumulate multiple requests`() = runBlocking {
+    fun testCollectShouldAccumulateMultipleRequests() = runBlocking {
         usageService.collect(
             sessionId = "test-session-2",
             model = "claude-sonnet-4-20250514",
@@ -68,8 +65,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(2, sessionUsage.requestCount)
     }
 
-    @Test
-    fun `test collect - should track multiple sessions independently`() = runBlocking {
+    fun testCollectShouldTrackMultipleSessionsIndependently() = runBlocking {
         usageService.collect(
             sessionId = "session-a",
             model = "claude-sonnet-4-20250514",
@@ -91,8 +87,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(2000L, sessionB.inputTokens)
     }
 
-    @Test
-    fun `test calculateCost - should calculate correctly for sonnet`() {
+    fun testCalculateCostShouldCalculateCorrectlyForSonnet() {
         val cost = usageService.calculateCost(
             model = "claude-sonnet-4-20250514",
             inputTokens = 1_000_000,
@@ -104,8 +99,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(expectedCost, cost, 0.01)
     }
 
-    @Test
-    fun `test calculateCost - should calculate correctly for opus`() {
+    fun testCalculateCostShouldCalculateCorrectlyForOpus() {
         val cost = usageService.calculateCost(
             model = "claude-opus-4-20250514",
             inputTokens = 1_000_000,
@@ -117,8 +111,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(expectedCost, cost, 0.01)
     }
 
-    @Test
-    fun `test calculateCost - should handle cache tokens`() {
+    fun testCalculateCostShouldHandleCacheTokens() {
         val cost = usageService.calculateCost(
             model = "claude-sonnet-4-20250514",
             inputTokens = 1_000_000,
@@ -137,8 +130,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(expectedCost, cost, 0.01)
     }
 
-    @Test
-    fun `test calculateCost - should use default pricing for unknown model`() {
+    fun testCalculateCostShouldUseDefaultPricingForUnknownModel() {
         val cost = usageService.calculateCost(
             model = "unknown-model",
             inputTokens = 1_000_000,
@@ -150,8 +142,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(expectedCost, cost, 0.01)
     }
 
-    @Test
-    fun `test getProjectUsageSummary - should aggregate all sessions`() = runBlocking {
+    fun testGetProjectUsageSummaryShouldAggregateAllSessions() = runBlocking {
         usageService.collect(
             sessionId = "session-1",
             model = "claude-sonnet-4-20250514",
@@ -172,8 +163,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(4500L, summary.totalTokens)
     }
 
-    @Test
-    fun `test getProjectUsageSummary - should group by model`() = runBlocking {
+    fun testGetProjectUsageSummaryShouldGroupByModel() = runBlocking {
         usageService.collect(
             sessionId = "session-1",
             model = "claude-sonnet-4-20250514",
@@ -193,15 +183,14 @@ class UsageServiceTest : LightPlatformTestCase() {
 
         val sonnetUsage = summary.byModel["claude-sonnet-4-20250514"]
         assertNotNull(sonnetUsage)
-        assertEquals(1000L, sonnetUsage.inputTokens)
+        assertEquals(1000L, sonnetUsage!!.inputTokens)
 
         val opusUsage = summary.byModel["claude-opus-4-20250514"]
         assertNotNull(opusUsage)
-        assertEquals(2000L, opusUsage.inputTokens)
+        assertEquals(2000L, opusUsage!!.inputTokens)
     }
 
-    @Test
-    fun `test getProjectUsageSummary - should filter by time period`() = runBlocking {
+    fun testGetProjectUsageSummaryShouldFilterByTimePeriod() = runBlocking {
         // This test verifies the period filtering logic works
         // Note: In real tests, you'd need to control the timestamp
         val summary = usageService.getProjectUsageSummary(TimePeriod.ALL_TIME)
@@ -217,8 +206,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertNotNull(last30Days)
     }
 
-    @Test
-    fun `test resetSessionUsage - should clear current session`() = runBlocking {
+    fun testResetSessionUsageShouldClearCurrentSession() = runBlocking {
         usageService.collect(
             sessionId = "test-session",
             model = "claude-sonnet-4-20250514",
@@ -235,8 +223,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(0L, afterReset.inputTokens)
     }
 
-    @Test
-    fun `test clearHistory - should remove all records`() = runBlocking {
+    fun testClearHistoryShouldRemoveAllRecords() = runBlocking {
         usageService.collect(
             sessionId = "test-session",
             model = "claude-sonnet-4-20250514",
@@ -252,8 +239,7 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertEquals(0L, cleared.totalTokens)
     }
 
-    @Test
-    fun `test collect with cache tokens - should record correctly`() = runBlocking {
+    fun testCollectWithCacheTokensShouldRecordCorrectly() = runBlocking {
         usageService.collect(
             sessionId = "test-cache",
             model = "claude-sonnet-4-20250514",
@@ -272,19 +258,19 @@ class UsageServiceTest : LightPlatformTestCase() {
         assertTrue(sessionUsage.cost > 0)
     }
 
-    @Test
-    fun `test projectUsage - should emit updates on collect`() = runBlocking {
+    fun testProjectUsageShouldEmitUpdatesOnCollect() = runBlocking {
         var updateCount = 0
         var lastProjectUsage: UsageService.ProjectUsage? = null
 
-        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+        val scope = CoroutineScope(Dispatchers.Default)
+        val job: Job = scope.launch {
             usageService.projectUsage.collect { projectUsage ->
                 updateCount++
                 lastProjectUsage = projectUsage
             }
         }
 
-        kotlinx.coroutines.delay(100)
+        delay(100)
 
         usageService.collect(
             sessionId = "test-emit",
@@ -293,17 +279,17 @@ class UsageServiceTest : LightPlatformTestCase() {
             outputTokens = 500
         )
 
-        kotlinx.coroutines.delay(100)
+        delay(100)
 
         assertTrue(updateCount > 0)
         assertNotNull(lastProjectUsage)
         assertTrue(lastProjectUsage!!.totalTokens > 0)
 
         job.cancel()
+        scope.cancel()
     }
 
-    @Test
-    fun `test currentSessionUsage - should track active session`() = runBlocking {
+    fun testCurrentSessionUsageShouldTrackActiveSession() = runBlocking {
         usageService.collect(
             sessionId = "active-session",
             model = "claude-sonnet-4-20250514",

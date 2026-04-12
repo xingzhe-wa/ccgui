@@ -6,12 +6,6 @@ import com.github.claudecode.ccgui.model.mcp.McpServerStatus
 import com.github.claudecode.ccgui.model.mcp.TestResult
 import com.intellij.testFramework.LightPlatformTestCase
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * McpServerManager 单元测试
@@ -20,23 +14,20 @@ class McpServerManagerTest : LightPlatformTestCase() {
 
     private lateinit var mcpServerManager: McpServerManager
 
-    @Before
     override fun setUp() {
         super.setUp()
         mcpServerManager = McpServerManager.getInstance(project)
     }
 
-    @After
     override fun tearDown() {
-        super.tearDown()
         // 清理测试创建的服务器
         mcpServerManager.getAllServers()
             .filter { it.id.startsWith("test-") }
             .forEach { mcpServerManager.deleteServer(it.id) }
+        super.tearDown()
     }
 
-    @Test
-    fun `test addServer - should add server successfully`() {
+    fun testAddServerShouldAddServerSuccessfully() {
         val server = McpServer(
             id = "test-server-1",
             name = "Test Server",
@@ -50,11 +41,10 @@ class McpServerManagerTest : LightPlatformTestCase() {
 
         val retrieved = mcpServerManager.getServer("test-server-1")
         assertNotNull(retrieved)
-        assertEquals("Test Server", retrieved.name)
+        assertEquals("Test Server", retrieved!!.name)
     }
 
-    @Test
-    fun `test addServer - should reject duplicate server`() {
+    fun testAddServerShouldRejectDuplicateServer() {
         val server = McpServer(
             id = "test-duplicate",
             name = "Duplicate Server",
@@ -70,8 +60,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertFalse(result2)
     }
 
-    @Test
-    fun `test updateServer - should update existing server`() {
+    fun testUpdateServerShouldUpdateExistingServer() {
         val server = McpServer(
             id = "test-update",
             name = "Original Name",
@@ -91,12 +80,11 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertTrue(result)
 
         val retrieved = mcpServerManager.getServer("test-update")
-        assertEquals("Updated Name", retrieved?.name)
-        assertEquals("python", retrieved?.command)
+        assertEquals("Updated Name", retrieved!!.name)
+        assertEquals("python", retrieved!!.command)
     }
 
-    @Test
-    fun `test deleteServer - should remove server`() {
+    fun testDeleteServerShouldRemoveServer() {
         val server = McpServer(
             id = "test-delete",
             name = "Delete Server",
@@ -112,11 +100,10 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertTrue(result)
 
         val retrieved = mcpServerManager.getServer("test-delete")
-        assertEquals(null, retrieved)
+        assertNull(retrieved)
     }
 
-    @Test
-    fun `test getServersByScope - should filter by scope`() {
+    fun testGetServersByScopeShouldFilterByScope() {
         val projectServer = McpServer(
             id = "test-project",
             name = "Project Server",
@@ -145,8 +132,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertEquals("test-global", globalServers[0].id)
     }
 
-    @Test
-    fun `test getEnabledServers - should return only enabled servers`() {
+    fun testGetEnabledServersShouldReturnOnlyEnabledServers() {
         val enabledServer = McpServer(
             id = "test-enabled",
             name = "Enabled Server",
@@ -173,8 +159,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertEquals("test-enabled", enabledServers[0].id)
     }
 
-    @Test
-    fun `test setServerEnabled - should toggle server status`() {
+    fun testSetServerEnabledShouldToggleServerStatus() {
         val server = McpServer(
             id = "test-toggle",
             name = "Toggle Server",
@@ -194,8 +179,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertEquals(1, mcpServerManager.getEnabledServers().size)
     }
 
-    @Test
-    fun `test searchServers - should find matching servers`() {
+    fun testSearchServersShouldFindMatchingServers() {
         val server1 = McpServer(
             id = "test-search-1",
             name = "File System Server",
@@ -225,8 +209,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertEquals(2, accessResults.size)
     }
 
-    @Test
-    fun `test exportServer - should return JSON representation`() {
+    fun testExportServerShouldReturnJsonRepresentation() {
         val server = McpServer(
             id = "test-export",
             name = "Export Server",
@@ -239,13 +222,12 @@ class McpServerManagerTest : LightPlatformTestCase() {
 
         val json = mcpServerManager.exportServer("test-export")
         assertNotNull(json)
-        assertTrue(json.contains("\"id\""))
-        assertTrue(json.contains("test-export"))
-        assertTrue(json.contains("Export Server"))
+        assertTrue(json!!.contains("\"id\""))
+        assertTrue(json!!.contains("test-export"))
+        assertTrue(json!!.contains("Export Server"))
     }
 
-    @Test
-    fun `test importServer - should import server from JSON`() {
+    fun testImportServerShouldImportServerFromJson() {
         val json = """
             {
                 "id": "test-import",
@@ -262,12 +244,11 @@ class McpServerManagerTest : LightPlatformTestCase() {
 
         val imported = mcpServerManager.getServer("test-import")
         assertNotNull(imported)
-        assertEquals("Imported Server", imported.name)
-        assertEquals("python", imported.command)
+        assertEquals("Imported Server", imported!!.name)
+        assertEquals("python", imported!!.command)
     }
 
-    @Test
-    fun `test importServers - should import multiple servers`() {
+    fun testImportServersShouldImportMultipleServers() {
         val json1 = """
             {
                 "id": "test-import-1",
@@ -295,8 +276,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertNotNull(mcpServerManager.getServer("test-import-2"))
     }
 
-    @Test
-    fun `test getServersByStatus - should filter by status`() {
+    fun testGetServersByStatusShouldFilterByStatus() {
         val connectedServer = McpServer(
             id = "test-connected",
             name = "Connected Server",
@@ -323,8 +303,7 @@ class McpServerManagerTest : LightPlatformTestCase() {
         assertEquals("test-connected", connectedServers[0].id)
     }
 
-    @Test
-    fun `test getAllServers - should return all servers`() {
+    fun testGetAllServersShouldReturnAllServers() {
         val server1 = McpServer(
             id = "test-all-1",
             name = "Server 1",

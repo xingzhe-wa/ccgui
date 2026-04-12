@@ -17,10 +17,12 @@ const THEME_OPTIONS: Array<{ value: ThemePresets; label: string; color: string }
   { value: ThemePresets.JETBRAINS_DARK, label: 'JetBrains Dark', color: 'hsl(217, 91%, 60%)' },
   { value: ThemePresets.JETBRAINS_LIGHT, label: 'JetBrains Light', color: 'hsl(210, 20%, 96%)' },
   { value: ThemePresets.GITHUB_DARK, label: 'GitHub Dark', color: 'hsl(210, 100%, 67%)' },
+  { value: ThemePresets.GITHUB_LIGHT, label: 'GitHub Light', color: 'hsl(211, 100%, 50%)' },
   { value: ThemePresets.VS_CODE_DARK, label: 'VSCode Dark', color: 'hsl(0, 100%, 50%)' },
   { value: ThemePresets.MONOKAI, label: 'Monokai', color: 'hsl(330, 100%, 65%)' },
   { value: ThemePresets.NORD, label: 'Nord', color: 'hsl(198, 52%, 60%)' },
-  { value: ThemePresets.SOLARIZED_LIGHT, label: 'Solarized Light', color: 'hsl(211, 100%, 50%)' }
+  { value: ThemePresets.SOLARIZED_LIGHT, label: 'Solarized Light', color: 'hsl(211, 100%, 50%)' },
+  { value: ThemePresets.SOLARIZED_DARK, label: 'Solarized Dark', color: 'hsl(211, 27%, 21%)' }
 ];
 
 export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ className }) {
@@ -28,7 +30,8 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentThemeOption = THEME_OPTIONS.find((opt) => opt.value === theme.id) ?? THEME_OPTIONS[0]!;
+  const currentThemeOption = THEME_OPTIONS.find((opt) => opt.value === theme.id);
+  const isCustomTheme = !currentThemeOption && theme.id !== 'follow-idea';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -77,9 +80,11 @@ export const ThemeSwitcher = memo<ThemeSwitcherProps>(function ThemeSwitcher({ c
       >
         <span
           className="w-4 h-4 rounded-full border border-border"
-          style={{ backgroundColor: currentThemeOption.color }}
+          style={{ backgroundColor: currentThemeOption?.color ?? theme.colors.primary }}
         />
-        <span className="text-sm text-foreground">{currentThemeOption.label}</span>
+        <span className="text-sm text-foreground">
+          {isCustomTheme ? `自定义: ${theme.name}` : currentThemeOption?.label ?? theme.name}
+        </span>
         <svg
           className={cn('w-4 h-4 text-foreground-muted transition-transform', isOpen && 'rotate-180')}
           fill="none"

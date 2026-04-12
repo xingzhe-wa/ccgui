@@ -3,11 +3,6 @@ package com.github.claudecode.ccgui.application.context
 import com.github.claudecode.ccgui.application.context.ContextManager.CompactResult
 import com.intellij.testFramework.LightPlatformTestCase
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * ContextManager 单元测试
@@ -16,22 +11,19 @@ class ContextManagerTest : LightPlatformTestCase() {
 
     private lateinit var contextManager: ContextManager
 
-    @Before
     override fun setUp() {
         super.setUp()
         contextManager = ContextManager.getInstance(project)
     }
 
-    @After
     override fun tearDown() {
-        super.tearDown()
         // 清理测试会话
         contextManager.removeSession("test-session-1")
         contextManager.removeSession("test-session-2")
+        super.tearDown()
     }
 
-    @Test
-    fun `test recordUserMessage - should track context length`() {
+    fun testRecordUserMessageShouldTrackContextLength() {
         contextManager.recordUserMessage("test-session-1", "Hello")
         assertEquals(5, contextManager.getContextLength("test-session-1"))
 
@@ -39,14 +31,12 @@ class ContextManagerTest : LightPlatformTestCase() {
         assertEquals(11, contextManager.getContextLength("test-session-1"))
     }
 
-    @Test
-    fun `test recordAssistantMessage - should track context length`() {
+    fun testRecordAssistantMessageShouldTrackContextLength() {
         contextManager.recordAssistantMessage("test-session-1", "Hi there!")
         assertEquals(9, contextManager.getContextLength("test-session-1"))
     }
 
-    @Test
-    fun `test recordUserMessage - should estimate tokens`() {
+    fun testRecordUserMessageShouldEstimateTokens() {
         contextManager.recordUserMessage("test-session-1", "A".repeat(100))
         val estimatedTokens = contextManager.getEstimatedTokens("test-session-1")
 
@@ -55,20 +45,17 @@ class ContextManagerTest : LightPlatformTestCase() {
         assertTrue(estimatedTokens <= 30)
     }
 
-    @Test
-    fun `test recordUserMessage - with custom token estimate`() {
+    fun testRecordUserMessageWithCustomTokenEstimate() {
         contextManager.recordUserMessage("test-session-1", "Short", estimatedTokens = 50)
         assertEquals(50, contextManager.getEstimatedTokens("test-session-1"))
     }
 
-    @Test
-    fun `test shouldCompact - should return false for small context`() {
+    fun testShouldCompactShouldReturnFalseForSmallContext() {
         contextManager.recordUserMessage("test-session-1", "Small message")
         assertFalse(contextManager.shouldCompact("test-session-1"))
     }
 
-    @Test
-    fun `test shouldCompact - should respect cooldown period`() = runBlocking {
+    fun testShouldCompactShouldRespectCooldownPeriod() = runBlocking {
         // 添加足够的内容触发压缩
         repeat(1000) {
             contextManager.recordUserMessage("test-cooldown", "A".repeat(100))
@@ -83,13 +70,12 @@ class ContextManagerTest : LightPlatformTestCase() {
 
         // 冷却期内应该返回 false
         val secondCheck = contextManager.shouldCompact("test-cooldown")
-        assertFalse(secondCheck, "Should respect cooldown period")
+        assertFalse(secondCheck)
 
         contextManager.removeSession("test-cooldown")
     }
 
-    @Test
-    fun `test getUsageRatio - should return correct ratio`() {
+    fun testGetUsageRatioShouldReturnCorrectRatio() {
         val sessionId = "test-ratio"
         contextManager.recordUserMessage(sessionId, "A".repeat(100))
 
@@ -100,8 +86,7 @@ class ContextManagerTest : LightPlatformTestCase() {
         contextManager.removeSession(sessionId)
     }
 
-    @Test
-    fun `test getUsageRatio - should clamp to 1.0`() {
+    fun testGetUsageRatioShouldClampTo1dot0() {
         val sessionId = "test-clamp"
 
         // 添加大量内容
@@ -110,13 +95,12 @@ class ContextManagerTest : LightPlatformTestCase() {
         }
 
         val ratio = contextManager.getUsageRatio(sessionId)
-        assertTrue(ratio <= 1.0, "Usage ratio should not exceed 1.0")
+        assertTrue(ratio <= 1.0)
 
         contextManager.removeSession(sessionId)
     }
 
-    @Test
-    fun `test resetSession - should clear all tracking`() {
+    fun testResetSessionShouldClearAllTracking() {
         val sessionId = "test-reset"
         contextManager.recordUserMessage(sessionId, "Some content")
         contextManager.recordAssistantMessage(sessionId, "Response")
@@ -130,8 +114,7 @@ class ContextManagerTest : LightPlatformTestCase() {
         assertEquals(0, contextManager.getEstimatedTokens(sessionId))
     }
 
-    @Test
-    fun `test removeSession - should clear all tracking`() {
+    fun testRemoveSessionShouldClearAllTracking() {
         val sessionId = "test-remove"
         contextManager.recordUserMessage(sessionId, "Content")
 
@@ -143,8 +126,7 @@ class ContextManagerTest : LightPlatformTestCase() {
         assertEquals(0, contextManager.getEstimatedTokens(sessionId))
     }
 
-    @Test
-    fun `test multiple sessions - should track independently`() {
+    fun testMultipleSessionsShouldTrackIndependently() {
         contextManager.recordUserMessage("session-a", "Content A")
         contextManager.recordUserMessage("session-b", "Content B")
 
@@ -152,18 +134,15 @@ class ContextManagerTest : LightPlatformTestCase() {
         assertEquals(9, contextManager.getContextLength("session-b"))
     }
 
-    @Test
-    fun `test getContextLength - should return 0 for non-existent session`() {
+    fun testGetContextLengthShouldReturn0ForNonExistentSession() {
         assertEquals(0, contextManager.getContextLength("non-existent"))
     }
 
-    @Test
-    fun `test getEstimatedTokens - should return 0 for non-existent session`() {
+    fun testGetEstimatedTokensShouldReturn0ForNonExistentSession() {
         assertEquals(0, contextManager.getEstimatedTokens("non-existent"))
     }
 
-    @Test
-    fun `test compact - should return Skipped for small context`() = runBlocking {
+    fun testCompactShouldReturnSkippedForSmallContext() = runBlocking {
         val sessionId = "test-small-compact"
         contextManager.recordUserMessage(sessionId, "Small")
 
@@ -173,8 +152,7 @@ class ContextManagerTest : LightPlatformTestCase() {
         contextManager.removeSession(sessionId)
     }
 
-    @Test
-    fun `test syncTokens - should update token count`() {
+    fun testSyncTokensShouldUpdateTokenCount() {
         val sessionId = "test-sync"
 
         contextManager.recordUserMessage(sessionId, "Content", estimatedTokens = 100)
@@ -187,8 +165,7 @@ class ContextManagerTest : LightPlatformTestCase() {
         contextManager.removeSession(sessionId)
     }
 
-    @Test
-    fun `test charThreshold - should be calculated correctly`() {
+    fun testCharThresholdShouldBeCalculatedCorrectly() {
         // maxContextTokens = 200,000
         // compactThresholdRatio = 0.80
         // charMultiplier = 3.5
@@ -206,19 +183,17 @@ class ContextManagerTest : LightPlatformTestCase() {
         // 5000 * 100 = 500,000 chars，应该接近但不超过阈值
 
         // 在阈值以下应该不触发压缩
-        assertFalse(contextManager.shouldCompact(sessionId), "Should not compact at ${currentLength} chars")
+        assertFalse(contextManager.shouldCompact(sessionId))
 
         contextManager.removeSession(sessionId)
     }
 
-    @Test
-    fun `test recordAssistantMessage - with custom token estimate`() {
+    fun testRecordAssistantMessageWithCustomTokenEstimate() {
         contextManager.recordAssistantMessage("test-session-1", "Response", estimatedTokens = 75)
         assertEquals(75, contextManager.getEstimatedTokens("test-session-1"))
     }
 
-    @Test
-    fun `test context tracking - should accumulate correctly`() {
+    fun testContextTrackingShouldAccumulateCorrectly() {
         val sessionId = "test-accumulate"
 
         contextManager.recordUserMessage(sessionId, "User 1", estimatedTokens = 10)

@@ -97,7 +97,7 @@ class LocaleSelectorComponent(private val project: Project) : Disposable {
         }
 
         // 监听语言变更事件（从其他地方更改语言时更新 UI）
-        localeSubscriptionId = EventBus.subscribeType(LocaleChangedEvent::class.java) { event ->
+        localeSubscriptionId = EventBus.subscribe(project, LocaleChangedEvent::class.java) { event ->
             updateSelection(event.locale)
         }
     }
@@ -126,7 +126,7 @@ class LocaleSelectorComponent(private val project: Project) : Disposable {
 
     override fun dispose() {
         // 取消 EventBus 订阅，防止内存泄漏
-        localeSubscriptionId?.let { EventBus.unsubscribe(it) }
+        localeSubscriptionId?.let { EventBus.unsubscribe(project, it) }
     }
 }
 
@@ -152,7 +152,7 @@ class LocaleStatusComponent(private val project: Project) : Disposable {
         label.border = javax.swing.border.EmptyBorder(2, 5, 2, 5)
 
         // 监听语言变更
-        localeSubscriptionId = EventBus.subscribeType(LocaleChangedEvent::class.java) { event ->
+        localeSubscriptionId = EventBus.subscribe(project, LocaleChangedEvent::class.java) { event ->
             updateLabel()
         }
     }
@@ -167,6 +167,6 @@ class LocaleStatusComponent(private val project: Project) : Disposable {
 
     override fun dispose() {
         // 取消 EventBus 订阅，防止内存泄漏
-        localeSubscriptionId?.let { EventBus.unsubscribe(it) }
+        localeSubscriptionId?.let { EventBus.unsubscribe(project, it) }
     }
 }

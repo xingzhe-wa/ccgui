@@ -3,13 +3,7 @@ package com.github.claudecode.ccgui.infrastructure.storage
 import com.github.claudecode.ccgui.util.JsonUtils
 import com.intellij.testFramework.LightPlatformTestCase
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
 import java.io.File
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 
 /**
  * MessageContentStorage 单元测试
@@ -18,56 +12,59 @@ class MessageContentStorageTest : LightPlatformTestCase() {
 
     private lateinit var storage: MessageContentStorage
 
-    @Before
     override fun setUp() {
         super.setUp()
         storage = MessageContentStorage.getInstance(project)
     }
 
-    @After
-    override fun tearDown() {
-        super.tearDown()
-        storage.cleanup()
-    }
+    // Note: cleanup() is a suspend function so we can't call it in tearDown directly
+    // Each test that creates content is responsible for cleanup
 
-    @Test
-    fun `test storeContent - small content should keep in memory`() {
+    fun testStoreContentSmallContentShouldKeepInMemory() = runBlocking {
         val smallContent = "a".repeat(100) // 100 chars < threshold
         val result = storage.storeContent("msg-1", smallContent)
 
         assertEquals(smallContent, result)
         assertFalse(MessageContentStorage.isFileReference(result))
+
+        // Cleanup
+        storage.deleteContent(result, "msg-1")
     }
 
-    @Test
-    fun `test storeContent - large content should use file storage`() {
+    fun testStoreContentLargeContentShouldUseFileStorage() = runBlocking {
         val largeContent = "a".repeat(6000) // 6000 chars > threshold
         val result = storage.storeContent("msg-2", largeContent)
 
         assertTrue(MessageContentStorage.isFileReference(result))
         assertTrue(result.startsWith("file://"))
+
+        // Cleanup
+        storage.deleteContent(result, "msg-2")
     }
 
-    @Test
-    fun `test getContent - should return original content for small content`() {
+    fun testGetContentShouldReturnOriginalContentForSmallContent() = runBlocking {
         val smallContent = "test content"
         storage.storeContent("msg-3", smallContent)
 
         val result = storage.getContent(smallContent, "msg-3")
         assertEquals(smallContent, result)
+
+        // Cleanup
+        storage.deleteContent(smallContent, "msg-3")
     }
 
-    @Test
-    fun `test getContent - should return file content for large content`() {
+    fun testGetContentShouldReturnFileContentForLargeContent() = runBlocking {
         val largeContent = "x".repeat(6000)
         val fileRef = storage.storeContent("msg-4", largeContent)
 
         val result = storage.getContent(fileRef, "msg-4")
         assertEquals(largeContent, result)
+
+        // Cleanup
+        storage.deleteContent(fileRef, "msg-4")
     }
 
-    @Test
-    fun `test getContent - should cache file content`() {
+    fun testGetContentShouldCacheFileContent() = runBlocking {
         val largeContent = "y".repeat(6000)
         val fileRef = storage.storeContent("msg-5", largeContent)
 
@@ -82,10 +79,12 @@ class MessageContentStorageTest : LightPlatformTestCase() {
 
         assertEquals(largeContent, result1)
         assertEquals(largeContent, result2)
+
+        // Cleanup
+        storage.deleteContent(fileRef, "msg-5")
     }
 
-    @Test
-    fun `test deleteContent - should remove file for file reference`() {
+    fun testDeleteContentShouldRemoveFileForFileReference() = runBlocking {
         val largeContent = "z".repeat(6000)
         val fileRef = storage.storeContent("msg-6", largeContent)
 
@@ -94,7 +93,7 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         val filePath = MessageContentStorage.extractFilePath(fileRef)
         assertNotNull(filePath)
 
-        val file = File(filePath)
+        val file = File(filePath!!)
         assertTrue(file.exists())
 
         // 删除内容
@@ -104,8 +103,7 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         assertFalse(file.exists())
     }
 
-    @Test
-    fun `test deleteContent - should not affect regular content`() {
+    fun testDeleteContentShouldNotAffectRegularContent() = runBlocking {
         val smallContent = "test content"
         storage.storeContent("msg-7", smallContent)
 
@@ -117,7 +115,6 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         assertEquals(smallContent, result)
     }
 
-    @org.junit.Test
     fun testClearCacheShouldClearAllCachedContent() = runBlocking {
         // 添加一些缓存
         val largeContent = "w".repeat(6000)
@@ -130,9 +127,12 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         // 验证缓存统计
         val stats = storage.getStorageStats()
         assertEquals(0, stats.cachedCount)
+
+        // Cleanup
+        storage.deleteContent(storage.storeContent("msg-8", largeContent), "msg-8")
+        storage.deleteContent(storage.storeContent("msg-9", largeContent), "msg-9")
     }
 
-    @org.junit.Test
     fun testGetStorageStatsShouldReturnAccurateStats() = runBlocking {
         val stats1 = storage.getStorageStats()
         assertEquals(0, stats1.cachedCount)
@@ -145,9 +145,13 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         val stats2 = storage.getStorageStats()
         assertEquals(1, stats2.cachedCount) // 小内容被缓存
         assertTrue(stats2.fileCount >= 1)    // 大内容使用文件
+
+        // Cleanup
+        storage.deleteContent("small content", "msg-10")
+        val fileRef = storage.storeContent("msg-11", "x".repeat(6000))
+        storage.deleteContent(fileRef, "msg-11")
     }
 
-    @org.junit.Test
     fun testMultipleMessagesShouldHandleIndependently() = runBlocking {
         val content1 = "content 1"
         val content2 = "content 2"
@@ -155,11 +159,14 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         storage.storeContent("msg-12", content1)
         storage.storeContent("msg-13", content2)
 
-        assertEquals(content1, storage.getContent("msg-12", "msg-12"))
-        assertEquals(content2, storage.getContent("msg-13", "msg-13"))
+        assertEquals(content1, storage.getContent(content1, "msg-12"))
+        assertEquals(content2, storage.getContent(content2, "msg-13"))
+
+        // Cleanup
+        storage.deleteContent(content1, "msg-12")
+        storage.deleteContent(content2, "msg-13")
     }
 
-    @org.junit.Test
     fun testCleanupShouldRemoveAllFiles() = runBlocking {
         // 创建几个大消息
         repeat(3) {
@@ -175,7 +182,6 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         assertEquals(0, stats.fileCount)
     }
 
-    @org.junit.Test
     fun testFileReferenceFormatShouldBeCorrect() = runBlocking {
         val largeContent = "d".repeat(6000)
         val fileRef = storage.storeContent("msg-14", largeContent)
@@ -186,20 +192,24 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         assertNotNull(filePath)
 
         // 验证路径指向实际文件
-        val file = File(filePath)
+        val file = File(filePath!!)
         assertTrue(file.exists())
         assertEquals(largeContent.length.toLong(), file.length())
+
+        // Cleanup
+        storage.deleteContent(fileRef, "msg-14")
     }
 
-    @org.junit.Test
     fun testSpecialCharactersInContentShouldHandleCorrectly() = runBlocking {
-        val specialContent = "Test with 中文 🎉 and symbols: !@#$%^&*()"
+        val specialContent = "Test with 中文 🎉 and symbols: !@#\$%^&*()"
         val result = storage.storeContent("msg-15", specialContent)
 
         assertEquals(specialContent, storage.getContent(result, "msg-15"))
+
+        // Cleanup
+        storage.deleteContent(result, "msg-15")
     }
 
-    @org.junit.Test
     fun testEmptyContentShouldHandleCorrectly() = runBlocking {
         val emptyContent = ""
         val result = storage.storeContent("msg-16", emptyContent)
@@ -207,7 +217,6 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         assertEquals(emptyContent, storage.getContent(result, "msg-16"))
     }
 
-    @org.junit.Test
     fun testVeryLargeContentShouldHandleCorrectly() = runBlocking {
         val veryLargeContent = "v".repeat(100000) // 100k chars
         val fileRef = storage.storeContent("msg-17", veryLargeContent)
@@ -215,9 +224,11 @@ class MessageContentStorageTest : LightPlatformTestCase() {
         val result = storage.getContent(fileRef, "msg-17")
         assertEquals(veryLargeContent, result)
         assertEquals(100000, result.length)
+
+        // Cleanup
+        storage.deleteContent(fileRef, "msg-17")
     }
 
-    @org.junit.Test
     fun testConcurrentStorageShouldHandleSafely() = runBlocking {
         val threads = (1..10).map { threadId ->
             Thread {
@@ -237,6 +248,9 @@ class MessageContentStorageTest : LightPlatformTestCase() {
             val storedRef = storage.storeContent("msg-concurrent-$threadId", content)
             val result = storage.getContent(storedRef, "msg-concurrent-$threadId")
             assertEquals(content, result)
+
+            // Cleanup
+            storage.deleteContent(storedRef, "msg-concurrent-$threadId")
         }
     }
 }

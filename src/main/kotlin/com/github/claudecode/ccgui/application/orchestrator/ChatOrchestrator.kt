@@ -104,7 +104,7 @@ class ChatOrchestrator(private val project: Project) : Disposable {
                 // 1. 添加用户消息
                 val userMessage = ChatMessage.userMessage(content)
                 sessionManager.addMessage(effectiveSessionId, userMessage)
-                EventBus.publish(MessageAddedEvent(effectiveSessionId, userMessage.id, userMessage.role.name))
+                EventBus.publish(MessageAddedEvent(effectiveSessionId, userMessage.id, userMessage.role.name), project)
 
                 // 2. 创建助手消息占位
                 val assistantMessage = ChatMessage(
@@ -161,7 +161,7 @@ class ChatOrchestrator(private val project: Project) : Disposable {
                         status = MessageStatus.COMPLETED
                     )
                     sessionManager.addMessage(effectiveSessionId, finalMessage)
-                    EventBus.publish(MessageAddedEvent(effectiveSessionId, finalMessage.id, finalMessage.role.name))
+                    EventBus.publish(MessageAddedEvent(effectiveSessionId, finalMessage.id, finalMessage.role.name), project)
 
                     onResponse?.invoke(mapOf(
                         "messageId" to finalMessage.id,

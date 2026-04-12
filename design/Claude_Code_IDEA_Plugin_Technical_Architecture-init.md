@@ -1,9 +1,10 @@
 # Claude Code IDEA Plugin 产品技术架构文档
 
-> **版本**: v3.0 (轻量化优化版)  
-> **更新日期**: 2026-04-11  
-> **文档状态**: 最终版  
+> **版本**: v3.1 (PIT 合规增强版)
+> **更新日期**: 2026-04-12
+> **文档状态**: 最终版
 > **核心原则**: 轻量、原生、按需
+> **PIT 维护**: `../.claude/skills/pit/00-pit-master.md`（唯一写入点）
 
 ---
 
@@ -436,6 +437,35 @@ class StreamParser {
 }
 ```
 
+#### JCEF 页面生命周期注意事项
+
+> ⚠️ **PIT-001 经验**：JCEF 的 `loadURL()` / `loadHTML()` 是异步操作，立即返回不代表页面已加载完成。
+
+- 所有依赖 DOM 的 JavaScript 注入**必须**放在 `CefLoadHandler.onLoadingStateChange`（`isLoading == false`）回调中执行
+- 必须添加**后备超时机制**（建议 3 秒），防止 load handler 未触发的极端情况
+- 注入的任务应缓存在队列中，onLoadEnd 时依次执行
+
+```kotlin
+// CefBrowserPanel.kt — loadListeners 队列模式
+private val loadListeners = mutableListOf<() -> Unit>()
+
+fun addLoadListener(action: () -> Unit) {
+    if (isPageLoaded) action() else loadListeners.add(action)
+}
+
+private fun setupLoadListener() {
+    cefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+        override fun onLoadingStateChange(...) {
+            if (!isLoading) {
+                isPageLoaded = true
+                loadListeners.forEach { it() }
+                loadListeners.clear()
+            }
+        }
+    })
+}
+```
+
 #### 增量渲染策略
 
 ```kotlin
@@ -535,6 +565,26 @@ class ClaudeSettings : PersistentStateComponent<ClaudeSettings.State> {
     )
 }
 ```
+
+#### Claude Code Daemon 模式参数限制
+
+> ⚠️ **PIT-011 经验**：Claude Code daemon 模式（stdin/stdout NDJSON）下，以下参数**不接受用户自定义**，由 CLI 自动管理。
+
+| 参数 | HTTP API 模式 | Daemon CLI 模式 | 说明 |
+|------|--------------|-----------------|------|
+| `temperature` | ✅ 可配置 | ❌ 不支持 | Claude Code CLI 自动管理 |
+| `top_p` | ✅ 可配置 | ❌ 不支持 | Claude Code CLI 自动管理 |
+| `max_tokens` | ✅ 可配置 | ❌ 不支持 | Claude Code CLI 自动管理 |
+| `max_retries` | ✅ 可配置 | ❌ 不支持 | Claude Code CLI 自动管理 |
+| `--thinking-budget` | N/A | ✅ 支持 | 仅 daemon 模式可用 |
+| `--max-turns` | N/A | ✅ 支持 | 仅 daemon 模式可用 |
+| `--model` | ✅ 支持 | ✅ 支持 | 两模式均支持 |
+| `--output-format` | N/A | ✅ 支持 | 仅 daemon 模式可用 |
+
+**实现注意**：
+- 新增模型参数配置时，必须确认当前通信模式（HTTP API vs daemon CLI）的支持情况
+- 建议在配置 UI 中明确标注参数适用的通信模式
+- 参考实现：`SdkConfigBuilder.kt` 中仅构造 `--model`、`--thinking-budget`、`--max-turns` 等参数
 
 #### 热更新实现
 
@@ -1177,6 +1227,35 @@ class CommandListPopupStep(
      │                │                │                │
 ```
 
+#### 前后端通信协议封装层次
+
+> ⚠️ **PIT-003/PIT-005/PIT-006 经验**：Java 后端与 JCEF 前端之间存在**多层封装**，协议设计必须考虑逐层序列化和标识符传递。
+
+```
+前端 java-bridge.ts
+    │
+    │ invoke('sendMessage', { message: '{"sessionId":"...","content":"...","messageId":"..."}' })
+    │    ↑ message 字段是 JSON 字符串（双重序列化）
+    │
+    ▼
+Kotlin handleSendMessage
+    │
+    │ 1. 检查是否存在 message 字段，若存在则 JSON.parse()
+    │ 2. 提取 sessionId、content、messageId
+    │ 3. 保存 messageId 到上下文，供后续流式事件使用
+    │
+    ▼
+所有 streaming 事件必须携带该 messageId
+    │ streaming:chunk  → { messageId, chunk }
+    │ streaming:complete → { messageId }
+    │ streaming:error   → { messageId, error }
+```
+
+**关键实现点**：
+- `messageId` 必须在 `sendMessage` 时生成，并在整个会话周期中保持一致
+- 所有流式事件（chunk/complete/error）必须携带 `messageId`，以便前端过滤和关联
+- `handleSendMessage` 必须同时兼容嵌套 JSON 格式和直接字段格式作为 fallback
+
 ### 7.2 会话切换流程
 
 ```
@@ -1345,59 +1424,74 @@ class CommandListPopupStep(
 ### 8.3 项目结构
 
 ```
-claude-code-plugin/
-├── src/
-│   └── main/
-│       ├── resources/
-│       │   ├── META-INF/
-│       │   │   └── plugin.xml
-│       │   ├── messages/
-│       │   │   ├── Commands_zh.properties
-│       │   │   └── Commands_en.properties
-│       │   └── icons/
-│       │       └── claude.svg
-│       └── kotlin/
-│           └── com/github/claudecode/
-│               ├── ClaudeCodePlugin.kt
-│               ├── ui/
-│               │   ├── toolwindow/
-│               │   │   ├── ClaudeToolWindowFactory.kt
-│               │   │   ├── ChatPanel.kt
-│               │   │   ├── InputPanel.kt
-│               │   │   └── MessageList.kt
-│               │   ├── dialog/
-│               │   │   ├── SettingsDialog.kt
-│               │   │   └── CommitDialog.kt
-│               │   ├── popup/
-│               │   │   └── CommandCompletionPopup.kt
-│               │   └── action/
-│               │       ├── GenerateCommitAction.kt
-│               │       └── SendToClaudeAction.kt
-│               ├── service/
-│               │   ├── SessionService.kt
-│               │   ├── ConfigService.kt
-│               │   ├── ContextManager.kt
-│               │   ├── UsageTracker.kt
-│               │   └── CommandExecutor.kt
-│               ├── client/
-│               │   ├── ClaudeClient.kt
-│               │   ├── StreamParser.kt
-│               │   └── ProcessManager.kt
-│               ├── model/
-│               │   ├── Session.kt
-│               │   ├── Message.kt
-│               │   ├── Config.kt
-│               │   └── Usage.kt
-│               ├── storage/
-│               │   ├── SessionStorage.kt
-│               │   └── UsageStorage.kt
-│               └── util/
-│                   ├── EventBus.kt
-│                   ├── I18NManager.kt
-│                   └── GitAdapter.kt
+ccgui/
+├── src/main/kotlin/com/github/claudecode/ccgui/
+│   ├── action/                        # UI Actions（选中代码发送到Claude等）
+│   ├── adaptation/sdk/                 # Claude Code SDK 适配层（替代原来的 client/）
+│   │   ├── ClaudeCodeClient.kt
+│   │   ├── SdkConfigBuilder.kt
+│   │   └── SdkPermissionHandler.kt
+│   ├── application/                    # 服务层（业务逻辑）
+│   │   ├── agent/                     # Agent 执行器
+│   │   ├── chat/                      # 聊天核心
+│   │   ├── commit/                    # Commit 生成
+│   │   ├── config/                    # 配置管理
+│   │   ├── context/                   # 上下文管理
+│   │   ├── hook/                     # IDE 钩子
+│   │   ├── interaction/               # 交互管理
+│   │   ├── mcp/                      # MCP 管理
+│   │   ├── multimodal/               # 多模态输入
+│   │   ├── orchestrator/              # 聊天编排
+│   │   ├── prompt/                   # 提示词工程
+│   │   ├── session/                  # 会话管理
+│   │   ├── skill/                    # Skill 执行器
+│   │   ├── slash/                    # Slash 指令
+│   │   ├── streaming/                # 流式输出
+│   │   ├── task/                     # 任务跟踪
+│   │   ├── tool/                     # 工具集成
+│   │   ├── usage/                    # 用量统计
+│   │   └── viewmodel/                # UI 状态管理
+│   ├── bridge/                       # JS-Kotlin 桥接层
+│   ├── browser/                       # JCEF 浏览器面板
+│   │   └── handler/                  # JS 请求处理器
+│   ├── config/                       # 配置数据模型
+│   ├── infrastructure/               # 基础层
+│   │   ├── cache/                    # 缓存管理
+│   │   ├── error/                    # 错误处理
+│   │   ├── eventbus/                 # 事件总线（Platform MessageBus 适配层）
+│   │   ├── git/                      # Git 操作
+│   │   ├── process/                  # 进程管理
+│   │   ├── state/                    # 状态管理
+│   │   └── storage/                  # 持久化存储
+│   │       ├── SessionStorage.kt     # 会话存储（PersistentStateComponent）
+│   │       ├── MessageFileManager.kt  # 大消息文件管理
+│   │       ├── ConfigStorage.kt      # 配置存储
+│   │       ├── McpServerStorage.kt   # MCP 服务器存储
+│   │       └── SecureStorage.kt     # 敏感信息存储
+│   ├── model/                        # 数据模型
+│   │   ├── agent/                    # Agent 相关模型
+│   │   ├── config/                   # 配置数据模型
+│   │   ├── interaction/              # 交互数据模型
+│   │   └── ...
+│   ├── startup/                      # 启动活动
+│   ├── toolWindow/                   # 工具窗口
+│   ├── ui/                           # UI 组件
+│   └── util/                         # 工具类
+├── webview/                          # JCEF 前端（React）
+│   └── src/main/
+│       ├── components/               # React 组件
+│       ├── hooks/                    # 自定义 Hooks
+│       ├── lib/                      # 工具库（java-bridge.ts）
+│       └── index.tsx                 # 入口
 ├── build.gradle.kts
 └── gradle.properties
 ```
+
+> **注**：实际项目结构与 v3.0 文档规划的差异说明：
+> - `service/` → `application/`：服务层目录名调整
+> - `client/` → `adaptation/sdk/`：Claude SDK 适配层独立为子模块
+> - `storage/` → `infrastructure/storage/`：存储层增加 infrastructure 前缀
+> - 新增 `bridge/`、`browser/`、`startup/`、`toolWindow/`：功能演进所需
 
 ### 8.4 build.gradle.kts 配置
 
@@ -1769,23 +1863,101 @@ tasks {
 }
 ```
 
-### E. 轻量化检查清单
+### E. PIT 合规检查清单
 
-| 检查项 | 标准 | 状态 |
-|--------|------|------|
-| 插件包大小 | < 5MB | ⬜ |
+> **数据源**: `../.claude/skills/pit/00-pit-master.md`（PIT Master — 唯一写入点）
+> **合规清单**: `../.claude/skills/pit/01-pit-sync.md`（自动同步）
+> **维护方式**: 追加新 PIT 后调用 `/sync-pit` 同步本清单
+
+#### E.1 JCEF 时序（PIT-001）
+
+- [ ] **PIT-001**: 所有 JavaScript 注入代码是否放在 `onLoadEnd` 回调或 load listener 中？
+- [ ] **PIT-001**: 是否添加了后备超时（3 秒）防止 load handler 未触发？
+  - 检查：`CefBrowserPanel.kt`
+
+#### E.2 构建配置（PIT-002）
+
+- [ ] **PIT-002**: `vite.config.ts` 的 `base` 是否为 `'./'`（相对路径）？
+- [ ] **PIT-002**: 生产构建后是否通过 `file://` 协议测试过页面加载？
+  - 检查：`webview/vite.config.ts`
+
+#### E.3 前后端通信 + Kotlin 类型（PIT-003, PIT-006, PIT-009, PIT-010）
+
+- [ ] **PIT-003**: Java → JS 事件是否通过 `window.dispatchEvent(CustomEvent)` 广播？
+- [ ] **PIT-003**: 前端 `index.tsx` 是否通过 `window.addEventListener` 监听并转发到 `eventBus`？
+- [ ] **PIT-003**: `javaEvents` 数组是否包含了所有需要桥接的事件名？
+  - 检查：`CefBrowserPanel.kt`
+- [ ] **PIT-006**: `handleSendMessage` 是否处理了 `message` 字段的 JSON 字符串嵌套解析？
+- [ ] **PIT-006**: 是否同时兼容直接字段格式（`sessionId`/`content`）作为 fallback？
+  - 检查：`CefBrowserPanel.kt`
+- [ ] **PIT-009**: 所有 Java → JS 的 Promise 返回值是否处理 null 场景？
+- [ ] **PIT-009**: Kotlin handler 是否返回非空类型的结构化数据（不返回 null）？
+  - 检查：`TaskStatusBar.tsx:58-60`
+- [ ] **PIT-010**: Kotlin 中 `mutableMapOf` 异构值类型时是否显式声明 `MutableMap<K, V>`？
+- [ ] **PIT-010**: 若需要存储 null 值（如 `null as String?`），泛型参数 V 是否包含 `?`（可空）？
+  - 检查：`CefBrowserPanel.kt:636`
+
+#### E.4 协程调度（PIT-004）
+
+- [ ] **PIT-004**: 所有 `CoroutineScope` 是否使用 `Dispatchers.Default`？
+- [ ] **PIT-004**: 是否有启动阶段使用 `Dispatchers.Main` 的代码（应使用 `withContext(Dispatchers.EDT)` 临时切换）？
+  - 检查：`EventBus.kt`
+
+#### E.5 流式通信（PIT-005）
+
+- [ ] **PIT-005**: 所有 streaming 事件（chunk/complete/error）是否携带 `messageId`？
+- [ ] **PIT-005**: `handleSendMessage` 解析后是否将 `messageId` 保存到上下文中供后续事件使用？
+  - 检查：`CefBrowserPanel.kt`
+
+#### E.6 ID 一致性（PIT-007）
+
+- [ ] **PIT-007**: 所有 `getToolWindow()` 调用使用的 ID 是否与 `plugin.xml` 中注册的 ID 一致？
+- [ ] **PIT-007**: 新增 ToolWindow 时是否同时更新 `plugin.xml` 和代码中的 ID？
+  - 检查：`MyProjectActivity.kt`
+
+#### E.7 命名规范（PIT-008）
+
+- [ ] **PIT-008**: `plugin.xml` 的 `<name>` 标签是否设置为 "CC Assistant"（非内部 ID）？
+- [ ] **PIT-008**: ToolWindowFactory 是否显式调用 `setTitle("CC Assistant")`？
+- [ ] **PIT-008**: 代码中是否有硬编码的产品名 "CCGUI" 需要替换？
+  - 检查：`plugin.xml`
+
+#### E.8 Claude Code Daemon 参数限制（PIT-011）
+
+- [ ] **PIT-011**: 在 Claude Code daemon 模式下，任何模型级别的参数（temperature、topP、maxTokens 等）是否需要确认 CLI 支持后才暴露给用户？
+- [ ] **PIT-011**: 新增模型参数配置时，是否确认了当前通信模式（HTTP API vs daemon CLI）的支持情况？
+  - 检查：`SdkConfigBuilder.kt`
+
+#### E.9 Flex 布局方向（PIT-012）
+
+- [ ] **PIT-012**: 修改 flex 布局（增删子元素）时，是否确认 `flex-direction` 与预期布局方向一致？
+- [ ] **PIT-012**: UI 重构后是否通过实际运行验证所有页面可见且可交互（不能仅依赖编译通过）？
+  - 检查：`AppLayout.tsx`
+
+#### E.10 后端字段移除完整性（PIT-013）
+
+- [ ] **PIT-013**: 移除 data class 字段后，是否执行了全文搜索确认无残留引用？
+- [ ] **PIT-013**: 前后端共享字段变更时，是否同时更新 Kotlin data class + TS type + Bridge handler 三处？
+- [ ] **PIT-013**: 字段移除后是否运行了 `compileKotlin` + `tsc --noEmit` 双端编译验证？
+  - 检查：`ModelConfig.kt`、`CefBrowserPanel.kt`、`java-bridge.ts`
+
+#### E.11 轻量化约束指标
+
+| 检查项 | 标准      | 状态 |
+|--------|---------|------|
+| 插件包大小 | < 50MB  | ⬜ |
 | 启动时间增量 | < 500ms | ⬜ |
 | 内存占用 | < 100MB | ⬜ |
-| 外部依赖数 | < 5个 | ⬜ |
-| 冷启动响应 | < 2s | ⬜ |
-| 无SQLite依赖 | ✅ | ⬜ |
-| 无RxJava依赖 | ✅ | ⬜ |
-| 使用Platform HTTP | ✅ | ⬜ |
-| 使用Platform存储 | ✅ | ⬜ |
-| 服务延迟加载 | ✅ | ⬜ |
+| 外部依赖数 | < 10个   | ⬜ |
+| 冷启动响应 | < 2s    | ⬜ |
+| 无SQLite依赖 | ✅       | ⬜ |
+| 无RxJava依赖 | ✅       | ⬜ |
+| 使用Platform HTTP | ✅       | ⬜ |
+| 使用Platform存储 | ✅       | ⬜ |
+| 服务延迟加载 | ✅       | ⬜ |
 
 ---
 
-> **文档版本**: v3.0 (轻量化优化版)  
-> **最后更新**: 2026-04-11  
+> **文档版本**: v3.1 (PIT 合规增强版)
+> **最后更新**: 2026-04-12
 > **维护者**: Claude Code IDEA Plugin Team

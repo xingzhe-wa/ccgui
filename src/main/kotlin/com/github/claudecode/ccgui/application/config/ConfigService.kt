@@ -70,7 +70,7 @@ class ConfigService(private val project: Project) : Disposable {
         if (getActiveProfileId() == SpecialProviderIds.LOCAL_SETTINGS) {
             // 发布配置变更事件（LocalSettingsReader 每次都重新读取文件，无需缓存清除）
             val newConfig = getActiveModelConfig()
-            EventBus.publish(ConfigChangedEvent("externalConfig", newConfig))
+            EventBus.publish(ConfigChangedEvent("externalConfig", newConfig), project)
             log.info("ConfigService: Reloaded local settings from external change")
         }
     }
@@ -87,7 +87,7 @@ class ConfigService(private val project: Project) : Disposable {
      */
     fun saveAppConfig(config: AppConfig) {
         configStorage.saveAppConfig(config)
-        EventBus.publish(ConfigChangedEvent("appConfig", config))
+        EventBus.publish(ConfigChangedEvent("appConfig", config), project)
         log.info("App config saved")
     }
 
@@ -112,7 +112,7 @@ class ConfigService(private val project: Project) : Disposable {
      */
     fun setCurrentTheme(themeId: String) {
         configStorage.currentThemeId = themeId
-        EventBus.publish(ConfigChangedEvent("theme", themeId))
+        EventBus.publish(ConfigChangedEvent("theme", themeId), project)
         log.info("Theme changed to: $themeId")
     }
 
@@ -136,7 +136,7 @@ class ConfigService(private val project: Project) : Disposable {
      */
     fun saveCustomTheme(theme: ThemeConfig) {
         configStorage.addCustomTheme(theme)
-        EventBus.publish(ConfigChangedEvent("customTheme", theme))
+        EventBus.publish(ConfigChangedEvent("customTheme", theme), project)
         log.info("Custom theme saved: ${theme.id}")
     }
 
@@ -145,7 +145,7 @@ class ConfigService(private val project: Project) : Disposable {
      */
     fun deleteCustomTheme(themeId: String) {
         configStorage.deleteCustomTheme(themeId)
-        EventBus.publish(ConfigChangedEvent("customThemeDeleted", themeId))
+        EventBus.publish(ConfigChangedEvent("customThemeDeleted", themeId), project)
         log.info("Custom theme deleted: $themeId")
     }
 
@@ -154,7 +154,7 @@ class ConfigService(private val project: Project) : Disposable {
      */
     fun resetToDefaults() {
         configStorage.resetToDefaults()
-        EventBus.publish(ConfigChangedEvent("reset", null))
+        EventBus.publish(ConfigChangedEvent("reset", null), project)
         log.info("Config reset to defaults")
     }
 

@@ -47,7 +47,8 @@ class LocaleConfigManager(private val project: Project) {
 
         // 发布语言变更事件
         com.github.claudecode.ccgui.infrastructure.eventbus.EventBus.publish(
-            com.github.claudecode.ccgui.infrastructure.eventbus.LocaleChangedEvent(locale)
+            com.github.claudecode.ccgui.infrastructure.eventbus.LocaleChangedEvent(locale),
+            project
         )
     }
 

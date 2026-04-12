@@ -164,7 +164,7 @@ class StreamingOutputEngine(private val project: Project) : Disposable {
         accumulatedChunk.append(chunk)
 
         // 发送内部事件
-        EventBus.publish(SdkTextDeltaEvent(messageId, chunk))
+        EventBus.publish(SdkTextDeltaEvent(messageId, chunk), project)
 
         // 计算当前累积内容的大小
         val currentPayloadSize = accumulatedChunk.toString().toByteArray(StandardCharsets.UTF_8).size
